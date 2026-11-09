@@ -1,5 +1,6 @@
 """Storyline: Flask routes only. The real work lives in services/."""
 
+import hashlib
 import hmac
 import json
 import logging
@@ -28,6 +29,9 @@ for noisy in ("httpx", "httpx2", "httpcore"):  # one line per HTTP request is to
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # uploads bigger than 20 MB are refused
 app.jinja_env.filters["curly"] = page.curly  # it's -> it’s on the page
+
+# Changes whenever the stylesheet does, so browsers never pair a new page with an old one.
+CSS_VERSION = hashlib.sha256((config.ROOT / "static" / "style.css").read_bytes()).hexdigest()[:10]
 
 SAMPLE_CALL = config.ROOT / "tests" / "fixtures" / "end_of_call_report.json"
 LINQ_WEBHOOK_VERSION = "2026-02-03"  # the payload shape services/photos.py reads
@@ -96,6 +100,7 @@ def index():
     return render_template(
         "index.html",
         page=page.page_data(),
+        css_version=CSS_VERSION,
         call_status=status if status and not msg.startswith("photo") else None,
         photo_status=status if status and msg.startswith("photo") else None,
     )

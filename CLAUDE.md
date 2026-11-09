@@ -153,7 +153,16 @@ Cache Sheet reads for 60 seconds so page loads don't hit Google's rate limits.
 
 Built (Nov 2026): `services/page.py` gathers everything in parallel and never raises. If the Sheet is down, it shows the last rows it read, and otherwise says plainly what's missing. Rows show a ✓ only when there's real, current evidence; otherwise they show a hollow circle and a sentence. The call card shows the call's real first message (live weather included) and what the next call will bring up, linked to that story. Photos show as "What Claude saw" prints: the six newest, with their question and an "Asked on a call" or "Waiting for the next call" chip. The story book leaves out `test` stories and flags concerns as "Worth checking on". A small script disables the submit button and shows a busy label, so a double click can't start two calls.
 
-**Look** (the Storyline design system: https://claude.ai/artifact/UaANqeiqiRdzg3bCa7xCBD, private to the builder). Gold `#f2b01e` (Pittsburgh's bridge gold) is used only for the call card. The page is warm white paper with graphite ink, and brick is used only for concerns and errors. Literata is for Frank's world (stories, headings, spoken lines); Public Sans is for the machinery (forms, evidence, times). Fonts come from Google Fonts with Georgia and system-ui fallbacks. The design tokens live at the top of `static/style.css`, and the design system's `tokens.json` and `bundle.css` are generated from that file. Change the CSS first, then regenerate the system.
+**Look** (the Storyline design system: https://claude.ai/artifact/UaANqeiqiRdzg3bCa7xCBD, private to the builder):
+- **Color:** Pittsburgh's black and gold, light theme only (`color-scheme: light`), so every judge and the demo video see the same page.
+- **Two big blocks:** the gold (`#f2b01e`, bridge gold) call card, in the hero's right column next to the wordmark and the call's spoken opening line, and the ink "What's working right now" panel with gold checks.
+- **Bridge arches:** cut into the foot of both blocks, 3 on the card and 5 on the panel (3 on phones). Use them nowhere else.
+- **Small blocks:** gold-light and brick bleed off the top of the page, as on the design system's cover.
+- **Layout:** photos and the story book are split sections, with the heading on the left and the content on the right.
+- **Brick:** used only for concerns and errors, apart from the small top block.
+- **Type:** Literata for Frank's world (stories, headings, spoken lines) and Public Sans for the machinery (forms, evidence, times). Both come from Google Fonts, with Georgia and system-ui fallbacks.
+- **Source of truth:** the design tokens live at the top of `static/style.css`, and the design system's `tokens.json` and `bundle.css` are generated from that file. Change the CSS first, then regenerate the system.
+- **Caching:** the stylesheet link carries a content hash (`?v=`), so a deploy never pairs the new page with an old stylesheet.
 
 ## Environment variables
 

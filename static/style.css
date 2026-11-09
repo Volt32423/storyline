@@ -1,10 +1,11 @@
 /* Storyline. Tokens match the Storyline design system (tokens.json).
-   Gold is Pittsburgh's bridge gold and means one thing: the call.
+   Pittsburgh's black and gold: gold means the call, ink holds the proof, and
+   bridge arches are cut into the foot of both blocks.
    Literata is for Frank's world (stories, what's said); Public Sans is for
-   the machinery (forms, evidence, times). */
+   the machinery (forms, evidence, times). One light theme on purpose. */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --paper: #fcfaf6;
   --paper-raised: #ffffff;
@@ -12,6 +13,9 @@
   --line-strong: #8c8377;
   --ink: #24211d;
   --ink-muted: #5f5850;
+  --on-ink: #fcfaf6;
+  --on-ink-muted: #c4bbae;
+  --line-on-ink: #45403a;
   --gold: #f2b01e;
   --gold-light: #f8cd62;
   --gold-soft: #fbecc2;
@@ -21,7 +25,6 @@
   --on-button: #fcfaf6;
   --brick: #a23b21;
   --brick-soft: #f8e2da;
-  --brick-on-field: #a23b21; /* same in both themes: fields in the gold card stay light */
   --ok: #2f6a3f;
   --ok-soft: #e2f0e4;
   --focus: #24211d;
@@ -38,31 +41,14 @@
   --space-6: 32px;
   --space-7: 48px;
   --space-8: 72px;
+  --space-9: 96px;
 
   --radius-print: 3px;
   --radius-control: 10px;
   --radius-card: 24px;
   --radius-pill: 999px;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #1b1916;
-    --paper-raised: #25221e;
-    --line: #3a352f;
-    --line-strong: #8a8178;
-    --ink: #f3eee6;
-    --ink-muted: #bcb2a5;
-    --gold-soft: #3b3018;
-    --button: #f3eee6;
-    --on-button: #1b1916;
-    --brick: #f2896b;
-    --brick-soft: #43231b;
-    --ok: #9ad2a8;
-    --ok-soft: #1f3526;
-    --focus: #f2b01e;
-    --shadow-print: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-  }
+  --arch-height: 56px;
 }
 
 * { box-sizing: border-box; }
@@ -97,49 +83,100 @@ a:hover { text-decoration-color: currentColor; }
 }
 
 .page {
-  max-width: 760px;
+  max-width: 1168px;
   margin: 0 auto;
-  padding: var(--space-8) var(--space-4) var(--space-7);
+  padding: var(--space-8) var(--space-5) var(--space-7);
 }
 
-/* ---------- hero ---------- */
+/* ---------- bridge arches: cut into the foot of the gold and ink blocks ---------- */
+
+.arches {
+  position: absolute;
+  left: var(--space-6);
+  right: var(--space-6);
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.arches i {
+  display: block;
+  width: 64px;
+  height: var(--arch-height);
+  border-radius: 32px 32px 0 0;
+  background: var(--paper);
+}
+
+/* ---------- hero: name and voice on the left, the gold call card on the right ---------- */
+
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 31rem);
+  grid-template-areas:
+    "title card"
+    "opening card";
+  grid-template-rows: auto 1fr;
+  column-gap: var(--space-8);
+  row-gap: var(--space-7);
+}
+
+.sky {
+  position: absolute;
+  top: calc(-1 * var(--space-8));
+  right: 0;
+  display: flex;
+  gap: var(--space-5);
+}
+.sky span { display: block; height: var(--space-7); }
+.sky-tint { width: 144px; border-radius: 0 0 var(--radius-card) var(--radius-card); background: var(--gold-light); }
+.sky-brick { width: var(--space-7); border-radius: 0 0 var(--radius-control) var(--radius-control); background: var(--brick); }
+
+.hero-title { grid-area: title; padding-top: var(--space-5); }
 
 .wordmark {
   margin: 0;
-  font-size: clamp(56px, 14vw, 96px);
+  font-size: clamp(60px, 9vw, 112px);
   font-weight: 760;
-  line-height: 0.95;
-  letter-spacing: -0.035em;
+  line-height: 0.92;
+  letter-spacing: -0.04em;
 }
 
 .pitch {
-  max-width: 34ch;
+  max-width: 24ch;
+  margin: var(--space-5) 0 0;
+  font-size: 28px;
+  line-height: 1.35;
   text-wrap: balance;
-  margin: var(--space-4) 0 0;
-  font-size: 24px;
-  line-height: 1.4;
 }
 
-/* ---------- section headings ---------- */
-
-.section { margin-top: var(--space-8); }
-
-.section > h2,
-.call-card h2 {
+.opening { grid-area: opening; align-self: end; max-width: 34rem; }
+.opening-label {
   margin: 0;
-  font-size: clamp(30px, 6vw, 36px);
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
 }
-
-.lede { max-width: 60ch; margin: var(--space-3) 0 0; color: var(--ink-muted); }
+.opening blockquote {
+  margin: var(--space-3) 0 0;
+  font-size: 26px;
+  line-height: 1.5;
+  font-style: italic;
+  text-indent: -0.42em;
+}
+.opening .then {
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-sans);
+  font-size: 17px;
+}
 
 /* ---------- the call card: the one gold thing ---------- */
 
 .call-card {
-  margin-top: var(--space-7);
-  padding: var(--space-6);
+  grid-area: card;
+  position: relative;
+  padding: var(--space-6) var(--space-6) calc(var(--arch-height) + var(--space-6));
   border-radius: var(--radius-card);
   background: var(--gold);
   color: var(--on-gold);
@@ -147,7 +184,14 @@ a:hover { text-decoration-color: currentColor; }
 }
 .call-card a { text-decoration-color: currentColor; }
 
-.call-card .intro { max-width: 60ch; margin: var(--space-3) 0 0; }
+.call-card h2 {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+.call-card .intro { margin: var(--space-3) 0 0; font-size: 19px; line-height: 1.6; }
 
 .cheat {
   margin: var(--space-5) 0 0;
@@ -160,33 +204,15 @@ a:hover { text-decoration-color: currentColor; }
 }
 .cheat strong { font-weight: 700; }
 
-.opening { margin: var(--space-6) 0 0; }
-.opening-label {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 17px;
-  font-weight: 600;
-}
-.opening blockquote {
-  margin: var(--space-2) 0 0;
-  font-size: 24px;
-  line-height: 1.5;
-  font-style: italic;
-  text-indent: -0.42em;
-}
-.opening .then {
-  margin: var(--space-3) 0 0;
-  font-family: var(--font-sans);
-  font-size: 17px;
-}
+/* ---------- forms ---------- */
 
 .form {
   display: grid;
   gap: var(--space-4);
-  margin-top: var(--space-6);
+  margin-top: var(--space-5);
   font-family: var(--font-sans);
 }
-.form .fields { display: grid; gap: var(--space-4); grid-template-columns: 3fr 2fr; }
+.form .fields { display: grid; gap: var(--space-4); }
 .form label { display: grid; gap: var(--space-2); font-size: 17px; font-weight: 600; line-height: 1.3; }
 
 .form input {
@@ -225,7 +251,7 @@ a:hover { text-decoration-color: currentColor; }
 .button:disabled { cursor: progress; opacity: 0.75; }
 
 .status {
-  margin: var(--space-5) 0 0;
+  margin: var(--space-4) 0 0;
   padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-control);
   font-family: var(--font-sans);
@@ -236,18 +262,52 @@ a:hover { text-decoration-color: currentColor; }
 .status.ok { background: var(--ok-soft); color: var(--ok); }
 .status.error { background: var(--brick-soft); color: var(--brick); }
 .call-card .status.ok { background: var(--field); color: var(--on-gold); }
-.call-card .status.error { background: var(--field); color: var(--brick-on-field); }
+.call-card .status.error { background: var(--field); color: var(--brick); }
 
-/* ---------- what's working: the six superpowers ---------- */
+/* ---------- section headings ---------- */
 
-.powers { margin: var(--space-5) 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.section { margin-top: var(--space-9); }
+
+.section h2,
+.proof h2 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 40px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.lede { max-width: 60ch; margin: var(--space-3) 0 0; color: var(--ink-muted); }
+
+/* ---------- what's working: the ink panel ---------- */
+
+.proof {
+  position: relative;
+  margin-top: var(--space-9);
+  padding: var(--space-7) var(--space-7) calc(var(--arch-height) + var(--space-7));
+  border-radius: var(--radius-card);
+  background: var(--ink);
+  color: var(--on-ink);
+  --focus: var(--gold);
+}
+.proof .lede { color: var(--on-ink-muted); }
+
+.powers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--space-7);
+  margin: var(--space-6) 0 0;
+  padding: 0;
+  list-style: none;
+}
 
 .power {
   display: grid;
-  grid-template-columns: 32px 10.5rem 1fr;
+  grid-template-columns: 32px 1fr;
   gap: var(--space-2) var(--space-4);
+  align-content: start;
   padding: var(--space-5) 0;
-  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line-on-ink);
 }
 
 .mark {
@@ -262,11 +322,12 @@ a:hover { text-decoration-color: currentColor; }
   font-weight: 700;
   line-height: 1;
 }
-.mark.on { background: var(--ink); color: var(--paper); }
-.mark.off { border: 2px solid var(--line-strong); color: var(--ink-muted); }
+.mark.on { background: var(--gold); color: var(--on-gold); }
+.mark.off { border: 2px solid var(--on-ink-muted); }
 
-.power h3 { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.6; }
-.power .what { margin: 0; }
+.power h3 { margin: 0; font-size: 22px; font-weight: 700; line-height: 1.5; }
+.power .body { grid-column: 2; }
+.power .what { margin: 0; color: var(--on-ink-muted); font-size: 18px; line-height: 1.55; }
 .power .evidence {
   margin: var(--space-2) 0 0;
   font-family: var(--font-sans);
@@ -276,19 +337,24 @@ a:hover { text-decoration-color: currentColor; }
 }
 .power .evidence a { font-weight: 600; }
 
-/* ---------- photos: snapshot prints holding what Claude saw ---------- */
+/* ---------- photos and stories: heading on the left, content on the right ---------- */
 
-.share { margin-top: var(--space-5); }
-.share .text-us { margin: 0; font-size: 22px; line-height: 1.45; }
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 8fr);
+  column-gap: var(--space-8);
+  align-items: start;
+}
+.split-head { position: sticky; top: var(--space-5); }
+
+.share .text-us { margin: var(--space-5) 0 0; font-size: 20px; line-height: 1.5; }
 .share .text-us strong { font-weight: 700; white-space: nowrap; }
-.share details { margin-top: var(--space-4); font-family: var(--font-sans); font-size: 17px; }
-.share summary { cursor: pointer; font-weight: 600; text-decoration: underline; text-decoration-color: var(--gold); text-decoration-thickness: 3px; text-underline-offset: 4px; }
 
 .prints {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-5);
-  margin: var(--space-6) 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -338,13 +404,12 @@ a:hover { text-decoration-color: currentColor; }
 .chip.waiting { background: var(--gold-soft); color: var(--ink); }
 .chip.asked { background: var(--ok-soft); color: var(--ok); }
 
-/* ---------- the story book ---------- */
-
-.stories { margin: var(--space-5) 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.stories { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 
 .story { padding: var(--space-6) 0; border-bottom: 1px solid var(--line); scroll-margin-top: var(--space-5); }
+.story:first-child { padding-top: var(--space-5); }
 .story:target { background: var(--gold-soft); box-shadow: 0 0 0 var(--space-4) var(--gold-soft); }
-.story h3 { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+.story h3 { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
 .story .told { margin: var(--space-1) 0 0; color: var(--ink-muted); font-family: var(--font-sans); font-size: 15px; }
 .story .summary { max-width: 62ch; margin: var(--space-4) 0 0; }
 .story .facts {
@@ -369,7 +434,7 @@ a:hover { text-decoration-color: currentColor; }
 }
 
 .empty {
-  margin: var(--space-5) 0 0;
+  margin: 0;
   padding: var(--space-5);
   border: 1.5px dashed var(--line-strong);
   border-radius: var(--radius-control);
@@ -381,7 +446,7 @@ a:hover { text-decoration-color: currentColor; }
 /* ---------- footer ---------- */
 
 .footer {
-  margin-top: var(--space-8);
+  margin-top: var(--space-9);
   padding-top: var(--space-5);
   border-top: 1px solid var(--line);
   color: var(--ink-muted);
@@ -393,18 +458,45 @@ a:hover { text-decoration-color: currentColor; }
 .footer p + p { margin-top: var(--space-3); }
 .footer .links { color: var(--ink); font-size: 17px; font-weight: 600; }
 
-/* ---------- small screens ---------- */
+/* ---------- tablets: one column ---------- */
+
+@media (max-width: 1000px) {
+  .page { max-width: 760px; }
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "card" "opening";
+    grid-template-rows: auto;
+    row-gap: var(--space-6);
+  }
+  .opening { align-self: start; }
+  .split { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-6); }
+  .split-head { position: static; }
+  .form .fields { grid-template-columns: 3fr 2fr; }
+}
+
+/* ---------- phones ---------- */
 
 @media (max-width: 640px) {
   body { font-size: 19px; }
-  .page { padding-top: var(--space-7); }
-  .pitch { font-size: 21px; }
-  .call-card { margin-left: calc(-1 * var(--space-2)); margin-right: calc(-1 * var(--space-2)); padding: var(--space-5); border-radius: 18px; }
-  .opening blockquote { font-size: 21px; }
+  .page { padding: var(--space-7) var(--space-4) var(--space-7); }
+  .sky { top: calc(-1 * var(--space-7)); gap: var(--space-3); }
+  .sky span { height: var(--space-6); }
+  .sky-tint { width: 72px; border-radius: 0 0 18px 18px; }
+  .sky-brick { width: var(--space-5); }
+  .hero-title { padding-top: var(--space-6); }
+  .pitch { font-size: 22px; }
+  .call-card,
+  .proof { margin-left: calc(-1 * var(--space-2)); margin-right: calc(-1 * var(--space-2)); border-radius: 18px; }
+  .call-card { padding: var(--space-5) var(--space-5) calc(var(--arch-height) + var(--space-5)); }
+  .call-card h2 { font-size: 30px; }
+  .proof { padding: var(--space-6) var(--space-5) calc(var(--arch-height) + var(--space-5)); }
+  .arches { left: var(--space-5); right: var(--space-5); }
+  .proof .arches i:nth-child(n+4) { display: none; }
+  .opening blockquote { font-size: 22px; }
   .form .fields { grid-template-columns: 1fr; }
-  .power { grid-template-columns: 32px 1fr; }
-  .power .body { grid-column: 1 / -1; }
-  .prints { grid-template-columns: 1fr; }
+  .powers { grid-template-columns: minmax(0, 1fr); }
+  .prints { grid-template-columns: minmax(0, 1fr); }
+  .section, .proof { margin-top: var(--space-8); }
 }
 
 @media (prefers-reduced-motion: reduce) {

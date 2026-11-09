@@ -6,25 +6,45 @@
   <title>Storyline</title>
   <meta name="description" content="Storyline helps a grandfather with a fading memory revisit and save his life stories.">
   <meta name="theme-color" content="#f2b01e">
+  <meta name="color-scheme" content="light">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400..800;1,7..72,400..600&family=Public+Sans:wght@400;600;700&display=swap">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=css_version) }}">
 </head>
 <body>
   <main class="page">
-    <header>
-      <h1 class="wordmark">Storyline</h1>
-      <p class="pitch">Helping a grandfather with a fading memory revisit and save his life stories.</p>
-    </header>
+    <div class="hero">
+      <div class="sky" aria-hidden="true"><span class="sky-tint"></span><span class="sky-brick"></span></div>
 
-    <section class="call-card" id="try" aria-labelledby="try-heading">
-      <h2 id="try-heading">Try it</h2>
-      {% if call_status %}
-        <p class="status {{ call_status[0] }}" role="status">{{ call_status[1] }}</p>
-      {% endif %}
-      <p class="intro">You’ll play Grandpa {{ page.name }}, a made-up grandfather in his 80s whose memory is fading. Enter your number and the demo code from our submission, and you’ll get a call within seconds. Calls are capped at 3 minutes.</p>
-      <p class="cheat"><strong>Playing {{ page.name }}:</strong> {{ page.name }} grew up near Pittsburgh, worked in a steel mill, then delivered mail. His late wife was June. Make up the rest!</p>
+      <header class="hero-title">
+        <h1 class="wordmark">Storyline</h1>
+        <p class="pitch">Helping a grandfather with a fading memory revisit and save his life stories.</p>
+      </header>
+
+      <section class="call-card" id="try" aria-labelledby="try-heading">
+        <h2 id="try-heading">Try it</h2>
+        {% if call_status %}
+          <p class="status {{ call_status[0] }}" role="status">{{ call_status[1] }}</p>
+        {% endif %}
+        <p class="intro">You’ll play Grandpa {{ page.name }}, a made-up grandfather in his 80s whose memory is fading. Enter your number and the demo code from our submission, and you’ll get a call within seconds. Calls are capped at 3 minutes.</p>
+        <p class="cheat"><strong>Playing {{ page.name }}:</strong> {{ page.name }} grew up near Pittsburgh, worked in a steel mill, then delivered mail. His late wife was June. Make up the rest!</p>
+
+        <form method="post" action="{{ url_for('call') }}" class="form" data-busy="Starting your call&hellip;">
+          <div class="fields">
+            <label>
+              Your phone number (US)
+              <input type="tel" name="phone" autocomplete="tel" inputmode="tel" placeholder="(412) 555-0123" required>
+            </label>
+            <label>
+              Demo code
+              <input type="text" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            </label>
+          </div>
+          <button class="button" type="submit">Call me as Grandpa {{ page.name }}</button>
+        </form>
+        <span class="arches" aria-hidden="true"><i></i><i></i><i></i></span>
+      </section>
 
       <div class="opening">
         <p class="opening-label">Your call will open like this:</p>
@@ -39,23 +59,9 @@
           {%- endif -%}
         </p>
       </div>
+    </div>
 
-      <form method="post" action="{{ url_for('call') }}" class="form" data-busy="Starting your call&hellip;">
-        <div class="fields">
-          <label>
-            Your phone number (US)
-            <input type="tel" name="phone" autocomplete="tel" inputmode="tel" placeholder="(412) 555-0123" required>
-          </label>
-          <label>
-            Demo code
-            <input type="text" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" required>
-          </label>
-        </div>
-        <button class="button" type="submit">Call me as Grandpa {{ page.name }}</button>
-      </form>
-    </section>
-
-    <section class="section" id="working" aria-labelledby="working-heading">
+    <section class="proof" id="working" aria-labelledby="working-heading">
       <h2 id="working-heading">What&rsquo;s working right now</h2>
       <p class="lede">Storyline uses six AI superpowers. Each row shows the latest proof, live from the app.</p>
       <ul class="powers">
@@ -73,65 +79,73 @@
           </li>
         {% endfor %}
       </ul>
+      <span class="arches" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
     </section>
 
-    <section class="section" id="photos" aria-labelledby="photos-heading">
-      <h2 id="photos-heading">Photos Storyline has seen</h2>
-      <p class="lede">Storyline doesn&rsquo;t keep the photo itself. Claude looks at it, writes down what it sees and one gentle question, and the next call asks Grandpa {{ page.name }} about it.</p>
+    <section class="section split" id="photos" aria-labelledby="photos-heading">
+      <div class="split-head">
+        <h2 id="photos-heading">Photos Storyline has seen</h2>
+        <p class="lede">Storyline doesn&rsquo;t keep the photo itself. Claude looks at it, writes down what it sees and one gentle question, and the next call asks Grandpa {{ page.name }} about it.</p>
 
-      {% if photo_status %}
-        <p class="status {{ photo_status[0] }}" role="status">{{ photo_status[1] }}</p>
-      {% endif %}
-
-      <div class="share">
-        {% if page.linq_number %}
-          <p class="text-us">Text an old photo to <a href="{{ page.linq_sms }}"><strong>{{ page.linq_number }}</strong></a>, or upload one here.</p>
-        {% else %}
-          <p class="text-us">Upload an old photo here.</p>
+        {% if photo_status %}
+          <p class="status {{ photo_status[0] }}" role="status">{{ photo_status[1] }}</p>
         {% endif %}
-        <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="form" data-busy="Claude is looking at your photo&hellip;">
-          <div class="fields">
-            <label>
-              Photo
-              <input type="file" name="photo" accept="image/*" required>
-            </label>
-            <label>
-              Demo code
-              <input type="text" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" required>
-            </label>
-          </div>
-          <button class="button" type="submit">Share this photo</button>
-        </form>
+
+        <div class="share">
+          {% if page.linq_number %}
+            <p class="text-us">Text an old photo to <a href="{{ page.linq_sms }}"><strong>{{ page.linq_number }}</strong></a>, or upload one here.</p>
+          {% else %}
+            <p class="text-us">Upload an old photo here.</p>
+          {% endif %}
+          <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="form" data-busy="Claude is looking at your photo&hellip;">
+            <div class="fields">
+              <label>
+                Photo
+                <input type="file" name="photo" accept="image/*" required>
+              </label>
+              <label>
+                Demo code
+                <input type="text" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+              </label>
+            </div>
+            <button class="button" type="submit">Share this photo</button>
+          </form>
+        </div>
       </div>
 
-      {% if page.photos %}
-        <ul class="prints">
-          {% for photo in page.photos %}
-            <li class="print">
-              <p class="saw-label">What Claude saw</p>
-              <p class="saw">{{ photo.description|curly }}</p>
-              <p class="ask-label">Question for {{ page.name }}</p>
-              <p class="ask">&ldquo;{{ photo.question|curly }}&rdquo;</p>
-              <p class="meta">
-                <span>{{ photo.how }} {{ photo.when }}</span>
-                {% if photo.asked %}
-                  <span class="chip asked">Asked on a call</span>
-                {% else %}
-                  <span class="chip waiting">Waiting for the next call</span>
-                {% endif %}
-              </p>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="empty">No photos yet. Share one above, and what Claude sees in it shows up here.</p>
-      {% endif %}
+      <div class="split-body">
+        {% if page.photos %}
+          <ul class="prints">
+            {% for photo in page.photos %}
+              <li class="print">
+                <p class="saw-label">What Claude saw</p>
+                <p class="saw">{{ photo.description|curly }}</p>
+                <p class="ask-label">Question for {{ page.name }}</p>
+                <p class="ask">&ldquo;{{ photo.question|curly }}&rdquo;</p>
+                <p class="meta">
+                  <span>{{ photo.how }} {{ photo.when }}</span>
+                  {% if photo.asked %}
+                    <span class="chip asked">Asked on a call</span>
+                  {% else %}
+                    <span class="chip waiting">Waiting for the next call</span>
+                  {% endif %}
+                </p>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="empty">No photos yet. Share one, and what Claude sees in it shows up here.</p>
+        {% endif %}
+      </div>
     </section>
 
-    <section class="section" id="stories" aria-labelledby="stories-heading">
-      <h2 id="stories-heading">{{ page.name }}&rsquo;s story book</h2>
-      <p class="lede">Every story Storyline has saved, newest first. After each call, the family also gets the new story by text.</p>
+    <section class="section split" id="stories" aria-labelledby="stories-heading">
+      <div class="split-head">
+        <h2 id="stories-heading">{{ page.name }}&rsquo;s story book</h2>
+        <p class="lede">Every story Storyline has saved, newest first. After each call, the family also gets the new story by text.</p>
+      </div>
 
+      <div class="split-body">
       {% if page.stories %}
         <ul class="stories">
           {% for story in page.stories %}
@@ -154,6 +168,7 @@
       {% else %}
         <p class="empty">No stories yet. The first call adds one.</p>
       {% endif %}
+      </div>
     </section>
 
     <footer class="footer">
