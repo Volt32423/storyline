@@ -1,9 +1,19 @@
 """Everything the home page shows, gathered so that a slow or broken service
-never stops the page from loading. Sheet reads are cached for 60 seconds."""
+never slows the page down. Sheet reads are cached for 60 seconds.
+
+The page never waits more than PAGE_WAIT_SECONDS for the Sheet or the
+weather. Reads run in the background, one per source at a time. If one isn't
+back in time, the page shows the last rows it read and the read finishes for
+the next visitor. That matters beyond speed: Render's deploy checks load the
+page, and a page that hangs on a slow Google Apps Script gets the app
+restarted over and over (a 502 for visitors each time)."""
 
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import datetime
 
 from services import calls, config, sheets, weather
@@ -12,20 +22,66 @@ log = logging.getLogger(__name__)
 
 GITHUB_URL = "https://github.com/Volt32423/storyline"
 PHOTOS_SHOWN = 6
+PAGE_WAIT_SECONDS = 2.0
+SOURCES = ("stories", "photos", "calls")
+
+_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="page-data")
+_jobs: dict[str, Future] = {}
+_jobs_lock = threading.Lock()
 
 
-def _rows(tab: str) -> tuple[list[dict], bool]:
-    """(rows, ok). If the Sheet can't be reached, fall back to the last rows
-    read, so a hiccup at Google doesn't empty the page."""
+def _start(key: str, fn) -> Future:
+    """Run fn in the background unless the same read is already running."""
+    with _jobs_lock:
+        job = _jobs.get(key)
+        if job is None or job.done():
+            job = _pool.submit(fn)
+            _jobs[key] = job
+        return job
+
+
+def warm() -> None:
+    """Start reading everything the page needs, without waiting. Called once
+    the Sheet is set up, so the first visitor after a deploy gets a full page."""
+    if sheets.is_configured():
+        for tab in SOURCES:
+            if sheets.fresh(tab) is None:
+                _start(tab, lambda tab=tab: sheets.rows(tab))
+    _start("weather", weather.current)
+
+
+def _rows(tab: str, deadline: float) -> tuple[list[dict], bool]:
+    """(rows, ok) for a tab, never waiting past the deadline. Fresh cached rows
+    come back at once. Otherwise a background read starts (or is joined), and
+    if it isn't back by the deadline, the last rows read are used instead."""
     if not sheets.is_configured():
         return [], False
+    hit = sheets.fresh(tab)
+    if hit is not None:
+        return hit, True
+    job = _start(tab, lambda: sheets.rows(tab))
     try:
-        return sheets.rows(tab, use_cache=True), True
+        return job.result(timeout=max(0.0, deadline - time.monotonic())), True
+    except FutureTimeout:
+        stale = sheets.cached(tab)
+        log.warning("Sheet slow to answer for %s; page shows %s", tab,
+                    "older rows" if stale is not None else "no rows yet")
+        return stale or [], stale is not None
     except Exception as error:
         stale = sheets.cached(tab)
         log.error("Page couldn't read %s from the Sheet: %s%s", tab, error,
                   " (showing older rows)" if stale is not None else "")
         return stale or [], stale is not None
+
+
+def _weather(deadline: float) -> dict | None:
+    """Current weather, never waiting past the deadline (then the last reading,
+    if there is one)."""
+    job = _start("weather", weather.current)
+    try:
+        return job.result(timeout=max(0.0, deadline - time.monotonic()))
+    except Exception:
+        return weather.last()
 
 
 def friendly_time(timestamp: str) -> str:
@@ -109,7 +165,7 @@ def book_data() -> dict:
     """Everything templates/book.html needs: every story, oldest first, laid
     out like a keepsake. Concerns stay out; they're for the family to check,
     not for the book. Never raises."""
-    rows, ok = _rows("stories")
+    rows, ok = _rows("stories", time.monotonic() + PAGE_WAIT_SECONDS)
     stories = calls.memory_stories(rows)
     months = []
     for s in stories:
@@ -140,16 +196,14 @@ def book_data() -> dict:
 
 
 def page_data() -> dict:
-    """Everything templates/index.html needs. Never raises."""
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        stories_job = pool.submit(_rows, "stories")
-        photos_job = pool.submit(_rows, "photos")
-        calls_job = pool.submit(_rows, "calls")
-        weather_job = pool.submit(weather.current)
-        all_stories, stories_ok = stories_job.result()
-        photo_rows, photos_ok = photos_job.result()
-        call_rows, calls_ok = calls_job.result()
-        today = weather_job.result()
+    """Everything templates/index.html needs. Never raises, and never waits
+    more than about PAGE_WAIT_SECONDS."""
+    deadline = time.monotonic() + PAGE_WAIT_SECONDS
+    warm()  # start every read at once, so they run side by side
+    all_stories, stories_ok = _rows("stories", deadline)
+    photo_rows, photos_ok = _rows("photos", deadline)
+    call_rows, calls_ok = _rows("calls", deadline)
+    today = _weather(deadline)
 
     stories = calls.memory_stories(all_stories)
     plan = calls.choose_plan(stories, photo_rows, len(call_rows))
@@ -190,7 +244,7 @@ def page_data() -> dict:
     counts = (f"{_count(len(stories), 'story', 'stories')}, {_count(len(photo_rows), 'photo')} "
               f"and {_count(len(call_rows), 'call')} saved so far.")
     if not sheet_ok:
-        actions_line = "The Sheet can't be reached right now."
+        actions_line = "The Sheet isn't answering right now. Refresh in a moment."
     elif latest_saved:
         actions_line = (f"Latest: Claude saved “{latest_saved.get('title', '').strip()}” "
                         f"{friendly_time(latest_saved.get('timestamp', ''))}"

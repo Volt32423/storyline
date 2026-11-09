@@ -58,6 +58,7 @@ def _set_up_sheet() -> None:
                     fcntl.flock(lock, fcntl.LOCK_EX)
                 added = knowledge.seed_sheet()
             log.info("Sheet ready (%d seed stories added)", added)
+            page.warm()  # read the page's data now, so the first visitor gets a full page
             return
         except Exception as error:
             log.error(

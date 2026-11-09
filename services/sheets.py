@@ -70,10 +70,31 @@ def ensure_tabs() -> None:
 
 
 def append(tab: str, record: dict) -> None:
-    """Append one row. Values are stored as plain text, never as formulas."""
+    """Append one row. Values are stored as plain text, never as formulas.
+    The new row also goes into the cached rows, so the page shows it at once
+    even when the Sheet is slow to answer the next read."""
     values = [str(record.get(h, "")) for h in TABS[tab]]
-    _call("append", tab=tab, values=values)
-    _cache.pop(tab, None)
+    reply = _call("append", tab=tab, values=values)
+    hit = _cache.get(tab)
+    if hit and isinstance(reply.get("row"), int):
+        added = dict(zip(TABS[tab], values), _row=reply["row"])
+        _cache[tab] = (hit[0], [r for r in hit[1] if r.get("_row") != reply["row"]] + [added])
+    else:
+        expire(tab)
+
+
+def expire(tab: str) -> None:
+    """Mark a tab's cached rows as out of date, but keep them, so a page load
+    can still show them if the Sheet is slow to answer the refresh."""
+    hit = _cache.get(tab)
+    if hit:
+        _cache[tab] = (0.0, hit[1])
+
+
+def fresh(tab: str) -> list[dict] | None:
+    """The cached rows if they're less than CACHE_SECONDS old, else None."""
+    hit = _cache.get(tab)
+    return hit[1] if hit and time.time() - hit[0] < CACHE_SECONDS else None
 
 
 def rows(tab: str, use_cache: bool = False) -> list[dict]:
@@ -108,7 +129,10 @@ def update_cell(tab: str, row_number: int, column: str, value) -> None:
     """Set one cell. row_number is the Sheet row (data starts at row 2)."""
     col = TABS[tab].index(column) + 1
     _call("update_cell", tab=tab, row=row_number, col=col, value=str(value))
-    _cache.pop(tab, None)
+    hit = _cache.get(tab)
+    if hit:
+        _cache[tab] = (hit[0], [dict(r, **{column: str(value)}) if r.get("_row") == row_number else r
+                                for r in hit[1]])
 
 
 def sheet_url() -> str:

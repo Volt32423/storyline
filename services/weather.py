@@ -20,6 +20,11 @@ def city_name() -> str:
     return config.GRANDPA_CITY.split(",")[0].strip()
 
 
+def last() -> dict | None:
+    """The last weather reading, however old, or None."""
+    return _cache["value"]
+
+
 def current() -> dict | None:
     """Return {'temp': 48, 'description': 'light rain', 'city': 'Pittsburgh'},
     or None if the key is missing or OpenWeather can't be reached. Never raises."""
