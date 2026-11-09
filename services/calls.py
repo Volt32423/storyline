@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from services import claude_ai, config, knowledge, sheets, weather
+from services import claude_ai, config, knowledge, sheets, texting, weather
 
 log = logging.getLogger(__name__)
 
@@ -417,4 +417,8 @@ def handle_end_of_call(message: dict, source: str = "call") -> dict | None:
         log.error("Story '%s' couldn't be saved to the Sheet: %s", record["title"], error)
         return None
     log.info("Story saved: %s%s", record["title"], " (with a concern for the family)" if record["concern"] else "")
+    try:
+        texting.send_family_story(record)
+    except Exception as error:
+        log.error("Story saved, but the family text failed: %s", error)
     return record

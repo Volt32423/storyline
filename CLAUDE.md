@@ -29,6 +29,7 @@ This is a final project for an Applied AI class. **The deadline is Friday.** Jud
 
 - Python 3.12, Flask, gunicorn
 - `anthropic` (Claude) and `requests` (for the Vapi, Linq and OpenWeather REST APIs, and the Sheet bridge)
+- `pillow` and `pillow-heif` to convert and shrink photos before Claude sees them (added in step 3, because iPhone photos are often HEIC)
 - Google Sheets is reached through a small Apps Script web app inside the Sheet (`apps_script/Code.gs`), called with a shared secret. No Google Cloud project, no service account key, no `gspread`. The builder's Google project blocks key creation, so don't switch back.
 - Twilio is only the phone line behind Vapi. Our code never calls Twilio.
 - One HTML page: a Jinja template with plain CSS and a little JS. No frontend framework.
@@ -120,6 +121,8 @@ Built (Nov 2026): the webhook only accepts requests carrying `X-Storyline-Secret
 
 ### Incoming photo texts (`POST /webhooks/linq`)
 
+Built (Nov 2026): `services/texting.py` (Linq API: base `https://api.linqapp.com/api/partner`, Bearer token; new message `POST /v3/messages` with `{"to": [...], "message": {"parts": [...]}}`; reply `POST /v3/chats/{chatId}/messages` with `{"message": {"parts": [...]}}`; Standard Webhooks signature check: `webhook-id`, `webhook-timestamp`, `webhook-signature` = `v1,base64(HMAC-SHA256(key, "{id}.{ts}.{raw body}"))`, key = base64-decoded secret after `whsec_`, 5-minute window). `services/photos.py` runs the shared pipeline for texted and uploaded photos. **Vision uses `claude-haiku-5-5`, not Sonnet**: Sonnet 5.5 rejects a forced tool while its default adaptive thinking is on, and Haiku 5.5 allows it. Photos go through Pillow + pillow-heif first (HEIC converted, EXIF rotation applied, long edge ≤ 1600 px, JPEG), because Claude doesn't accept HEIC. The tool also returns `suitable`; unsuitable images aren't saved. CDN downloads try without the token, then with it. `GET /setup/linq?code=DEMO_CODE` creates the webhook subscription (pinned to version 2026-02-03) and shows the signing secret; it switches itself off once `LINQ_WEBHOOK_SECRET` is set. `gunicorn.conf.py` runs 1 worker with 8 threads and a 120 s timeout, so uploads waiting on Claude don't block other requests.
+
 1. Verify the webhook signature the way Linq's Webhooks guide describes.
 2. Return 200 right away and do the work in a background thread. Use `event_id` to skip duplicate deliveries.
 3. Ignore everything except inbound `message.received` events. Pin the webhook version when creating the subscription, and check docs.linqapp.com for the exact payload.
@@ -182,6 +185,7 @@ services/
   calls.py              # build the prompt, start the Vapi call
   weather.py
   texting.py            # Linq send + webhook signature check
+  photos.py             # photo pipeline shared by texts and uploads
 knowledge/profile.md    # Frank's fictional profile + seed stories (already written)
 apps_script/Code.gs     # the Sheet bridge; pasted into the Sheet's Apps Script editor
 templates/index.html
@@ -192,6 +196,7 @@ scripts/
   replay_linq.py        # POST a saved message.received payload to a running app
 tests/fixtures/         # saved payloads, phone numbers scrubbed
 requirements.txt
+gunicorn.conf.py        # 1 worker, 8 threads, 120 s timeout (read automatically by gunicorn)
 .env.example
 README.md
 ```
@@ -200,7 +205,7 @@ README.md
 
 - **Twilio (voice only):** upgrade the account ($20) and buy a local US number with Voice. A 412 (Pittsburgh) number matches Frank. No texting setup is needed here.
 - **Vapi:** create an account and import the Twilio number under Phone Numbers. SMS Enabled can stay off, since texting runs through Linq. Copy the number's id.
-- **Linq:** sign up for the free sandbox and get an API token and a number. Subscribe `PUBLIC_BASE_URL/webhooks/linq` to `message.received`, and copy the signing secret. Text the Linq number once from the family phone so the chat exists. Confirm the plan lasts through judging week and allows enough contacts (the free Hobby plan allows 20).
+- **Linq:** sign up for the free sandbox and get an API token and a number. Subscribe `PUBLIC_BASE_URL/webhooks/linq` to `message.received` (in Linq's dashboard, or by opening `/setup/linq?code=DEMO_CODE` once `LINQ_API_TOKEN` is set), and copy the signing secret into `LINQ_WEBHOOK_SECRET`. Text the Linq number once from the family phone so the chat exists. Confirm the plan lasts through judging week and allows enough contacts (the free Hobby plan allows 20).
 - **Anthropic Console:** create an API key.
 - **OpenWeather:** create a key. New keys can take up to 2 hours to activate.
 - **Google Sheet:** create the Sheet and set "anyone with the link" to Viewer. Paste `apps_script/Code.gs` into Extensions > Apps Script, set its `SECRET`, and deploy it as a web app (Execute as: Me, Who has access: Anyone). Copy the `/exec` URL. After any later edit to the script, deploy a new version. No Google Cloud project is needed.

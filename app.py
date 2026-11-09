@@ -10,7 +10,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
-from services import calls, claude_ai, config, knowledge, sheets
+from services import calls, claude_ai, config, knowledge, photos, sheets, texting
 
 try:
     import fcntl  # Linux/macOS only; Render runs Linux
@@ -26,8 +26,10 @@ for noisy in ("httpx", "httpx2", "httpcore"):  # one line per HTTP request is to
     logging.getLogger(noisy).setLevel(logging.WARNING)
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # uploads bigger than 20 MB are refused
 
 SAMPLE_CALL = config.ROOT / "tests" / "fixtures" / "end_of_call_report.json"
+LINQ_WEBHOOK_VERSION = "2026-02-03"  # the payload shape services/photos.py reads
 
 
 SETUP_TRIES = 30
@@ -72,6 +74,10 @@ MESSAGES = {
     "limit_day": ("error", "Storyline has made all its calls for today. Please try again tomorrow."),
     "not_ready": ("error", "Calls aren't switched on yet. Please try again later."),
     "call_failed": ("error", "Sorry, the call couldn't be started. Please try again in a minute."),
+    "photo_ok": ("ok", "Got it! Storyline will ask Grandpa Frank about this photo on the next call."),
+    "photo_bad": ("error", "Please choose a photo file (under 20 MB)."),
+    "photo_bad_code": ("error", "That demo code isn't right. It's in our project submission."),
+    "photo_failed": ("error", "Sorry, that photo couldn't be used. Please try a different one."),
 }
 
 
@@ -82,12 +88,14 @@ def _code_ok(code: str) -> bool:
 
 @app.get("/")
 def index():
-    status = MESSAGES.get(request.args.get("msg", ""))
+    msg = request.args.get("msg", "")
+    status = MESSAGES.get(msg)
     return render_template(
         "index.html",
         grandpa_name=config.GRANDPA_NAME,
         linq_number=config.get("LINQ_PHONE_NUMBER"),
-        status=status,
+        call_status=status if status and not msg.startswith("photo") else None,
+        photo_status=status if status and msg.startswith("photo") else None,
     )
 
 
@@ -145,6 +153,80 @@ def test_story():
     if not story:
         return jsonify({"ok": False, "error": "Claude didn't answer. Check ANTHROPIC_API_KEY and Render's logs."}), 500
     return jsonify({"ok": True, "saved_to_sheet": False, "story": story})
+
+
+@app.post("/upload")
+def upload():
+    """Backup path for the photo flow: describe an uploaded photo and save it,
+    exactly like a texted one. Needs the demo code."""
+    if not _code_ok(request.form.get("code", "")):
+        return redirect(url_for("index", msg="photo_bad_code", _anchor="photos"))
+    file = request.files.get("photo")
+    raw = file.read() if file else b""
+    if not raw:
+        return redirect(url_for("index", msg="photo_bad", _anchor="photos"))
+    try:
+        saved = photos.save_photo(raw, source="upload")
+    except Exception:
+        log.exception("Uploaded photo couldn't be saved")
+        saved = None
+    return redirect(url_for("index", msg="photo_ok" if saved else "photo_failed", _anchor="photos"))
+
+
+@app.errorhandler(413)
+def too_large(_error):
+    return redirect(url_for("index", msg="photo_bad", _anchor="photos"))
+
+
+@app.post("/webhooks/linq")
+def linq_webhook():
+    """Linq posts here when someone texts Storyline's number. Check the
+    signature, answer right away, and handle the photo in the background."""
+    raw = request.get_data()
+    if not texting.verify_webhook(raw, request.headers):
+        log.warning("Rejected a Linq webhook with a missing or bad signature")
+        return jsonify({"error": "invalid signature"}), 401
+    try:
+        event = json.loads(raw)
+    except ValueError:
+        return jsonify({"error": "bad json"}), 400
+    if event.get("event_type") == "message.received" and photos.first_time(event.get("event_id", "")):
+        threading.Thread(target=_safe_linq_event, args=(event,), daemon=True).start()
+    return jsonify({"ok": True})
+
+
+def _safe_linq_event(event: dict) -> None:
+    try:
+        photos.handle_linq_event(event)
+    except Exception:
+        log.exception("Handling a Linq message failed")
+
+
+@app.get("/setup/linq")
+def setup_linq():
+    """One-time setup: subscribe this app to Linq's message.received webhook and
+    show the signing secret to copy into LINQ_WEBHOOK_SECRET. Needs the demo
+    code, and switches itself off once LINQ_WEBHOOK_SECRET is set."""
+    if not _code_ok(request.args.get("code", "")):
+        abort(403)
+    if config.get("LINQ_WEBHOOK_SECRET"):
+        return jsonify({"ok": False, "error": "Already set up: LINQ_WEBHOOK_SECRET is set."}), 409
+    base_url = config.get("PUBLIC_BASE_URL").rstrip("/")
+    if not (texting.is_configured() and base_url):
+        return jsonify({"ok": False, "error": "Set LINQ_API_TOKEN and PUBLIC_BASE_URL in Render first."}), 400
+    target = f"{base_url}/webhooks/linq?version={LINQ_WEBHOOK_VERSION}"
+    try:
+        reply = texting.create_webhook_subscription(target)
+    except Exception as error:
+        log.error("Linq webhook setup failed: %s", error)
+        return jsonify({"ok": False, "error": str(error)}), 502
+    log.info("Linq webhook subscription created for %s", target)
+    return jsonify({
+        "ok": True,
+        "next_step": "Copy the signing secret below (it starts with whsec_) into LINQ_WEBHOOK_SECRET "
+                     "in Render, then save and deploy. This page switches off once it's set.",
+        "linq_reply": reply,
+    })
 
 
 @app.post("/webhooks/vapi")

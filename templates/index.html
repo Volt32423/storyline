@@ -29,8 +29,8 @@
       <p>You'll play Grandpa {{ grandpa_name }}, a made-up grandfather in his 80s whose memory is fading. Enter your number and the demo code from our submission, and you'll get a call within seconds. Calls are capped at 3 minutes.</p>
       <p class="cheat">Frank grew up near Pittsburgh, worked in a steel mill, then delivered mail. His late wife was June. Make up the rest!</p>
 
-      {% if status %}
-        <p class="status {{ status[0] }}" role="status">{{ status[1] }}</p>
+      {% if call_status %}
+        <p class="status {{ call_status[0] }}" role="status">{{ call_status[1] }}</p>
       {% endif %}
 
       <form method="post" action="{{ url_for('call') }}" class="call-form">
@@ -43,6 +43,32 @@
           <input type="text" name="code" autocomplete="off" required>
         </label>
         <button type="submit">Call me as Grandpa {{ grandpa_name }}</button>
+      </form>
+    </section>
+
+    <section class="card" id="photos">
+      <h2>Share an old photo</h2>
+      {% if linq_number %}
+        <p><strong>Text an old photo to {{ linq_number }}.</strong> Storyline describes it, and the next call asks Grandpa {{ grandpa_name }} about it.</p>
+        <p>Or upload one here:</p>
+      {% else %}
+        <p>Upload an old photo. Storyline describes it, and the next call asks Grandpa {{ grandpa_name }} about it.</p>
+      {% endif %}
+
+      {% if photo_status %}
+        <p class="status {{ photo_status[0] }}" role="status">{{ photo_status[1] }}</p>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="call-form">
+        <label>
+          Photo
+          <input type="file" name="photo" accept="image/*" required>
+        </label>
+        <label>
+          Demo code
+          <input type="text" name="code" autocomplete="off" required>
+        </label>
+        <button type="submit">Share this photo</button>
       </form>
     </section>
 
