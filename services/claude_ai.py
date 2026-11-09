@@ -33,21 +33,27 @@ def _anthropic():
 # Forcing Claude to "call" this tool guarantees we get these exact fields back.
 STORY_TOOL = {
     "name": "save_story",
-    "description": "Save the story Grandpa Frank shared on this call to the family story book.",
+    "description": f"Save the story Grandpa {config.GRANDPA_NAME} shared on this call to the family story book.",
     "input_schema": {
         "type": "object",
         "properties": {
             "has_story": {
                 "type": "boolean",
-                "description": "False if Frank shared no real memory (voicemail, wrong number, hung up early, or only small talk).",
+                "description": f"False if {config.GRANDPA_NAME} shared no real memory (voicemail, wrong number, hung up early, or only small talk).",
             },
             "title": {"type": "string", "description": "A warm, specific title of 2 to 6 words."},
             "summary": {
                 "type": "string",
-                "description": "3 to 5 sentences in Frank's own voice (first person, 'I'), keeping the details he gave.",
+                "description": f"3 to 5 sentences in {config.GRANDPA_NAME}'s own voice (first person, 'I'), keeping the details he gave.",
             },
-            "people": {"type": "string", "description": "People he mentioned, comma-separated, with who they are. Empty if none."},
-            "places": {"type": "string", "description": "Places he mentioned, comma-separated. Empty if none."},
+            "people": {
+                "type": "string",
+                "description": f"Other people {config.GRANDPA_NAME} mentioned (never {config.GRANDPA_NAME} himself), comma-separated, with who they are. Empty if none.",
+            },
+            "places": {
+                "type": "string",
+                "description": f"Places {config.GRANDPA_NAME} himself mentioned, comma-separated. Leave out places only Storyline said, such as the weather city. Empty if none.",
+            },
             "concern": {
                 "type": "string",
                 "description": "Anything the family may want to check on: pain, a fall, feeling unwell, or seeming upset. Empty if none.",
