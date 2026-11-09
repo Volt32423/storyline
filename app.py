@@ -9,6 +9,7 @@ import threading
 import time
 from pathlib import Path
 
+import requests
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
 from services import calls, claude_ai, config, knowledge, page, photos, sheets, texting
@@ -69,6 +70,41 @@ def _set_up_sheet() -> None:
 
 
 threading.Thread(target=_set_up_sheet, name="sheet-setup", daemon=True).start()
+
+
+KEEP_AWAKE_MINUTES = 10  # Render's free plan sleeps after 15 minutes without visitors
+
+
+def _keep_awake() -> None:
+    """Visit our own public /health every few minutes, so Render's free plan
+    never puts the app to sleep and no judge waits a minute for it to wake.
+    The request goes out and back in through Render's front door, so it
+    counts as a visitor. Off when PUBLIC_BASE_URL isn't set, or when
+    KEEP_AWAKE_MINUTES is 0."""
+    base = config.get("PUBLIC_BASE_URL").rstrip("/")
+    try:
+        minutes = float(config.get("KEEP_AWAKE_MINUTES", str(KEEP_AWAKE_MINUTES)))
+    except ValueError:
+        minutes = KEEP_AWAKE_MINUTES
+    if not base or minutes <= 0:
+        log.info("Keep-awake is off (set PUBLIC_BASE_URL to turn it on)")
+        return
+    log.info("Keep-awake on: visiting %s/health every %g minutes", base, minutes)
+    failures = 0
+    while True:
+        time.sleep(minutes * 60)
+        try:
+            response = requests.get(f"{base}/health", timeout=30)
+            response.raise_for_status()
+            if failures:
+                log.info("Keep-awake works again after %d failed visits", failures)
+            failures = 0
+        except Exception as error:
+            failures += 1
+            log.warning("Keep-awake visit failed (%d in a row): %s", failures, error)
+
+
+threading.Thread(target=_keep_awake, name="keep-awake", daemon=True).start()
 
 
 MESSAGES = {

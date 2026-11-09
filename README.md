@@ -86,6 +86,8 @@ If you change `Code.gs` later, the change only goes live after **Deploy > Manage
 2. Build command: `pip install -r requirements.txt`. Start command: `gunicorn app:app`. Health check path: `/health`.
 3. Add the variables from `.env.example` in the Environment section. Python 3.12 comes from `.python-version`.
 
+Render's free plan puts an app to sleep after 15 minutes without visitors, and waking it takes about a minute. Storyline keeps itself awake: once `PUBLIC_BASE_URL` is set, it visits its own `/health` every 10 minutes. Render's logs show `Keep-awake on` after each deploy. One always-on free service uses about 720 of Render's 750 free hours a month.
+
 ## Limits
 
 - Texting runs on Linq's free plan, which caps the number of contacts. If texting isn't available, the upload form does the same job for photos.

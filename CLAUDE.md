@@ -53,7 +53,7 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Linq (se
 - `POST /upload`: a photo upload form. This is the backup path for Vision if incoming texts misbehave.
 - `POST /webhooks/linq`: inbound texts and photos from Linq (`message.received`)
 - `POST /webhooks/vapi`: Vapi server messages. Only `end-of-call-report` matters.
-- `GET /health`: returns 200 "ok". An uptime pinger hits it every 10 minutes so Render never puts the app to sleep.
+- `GET /health`: returns 200 "ok". The app's own keep-awake thread (`_keep_awake` in `app.py`) visits `PUBLIC_BASE_URL/health` every 10 minutes (`KEEP_AWAKE_MINUTES`, 0 turns it off), so Render's free plan never sleeps. The request goes out and back in through Render, so it counts as a visitor. One always-on free service uses about 720 of the 750 free instance hours a month, so don't run a second always-on free service in the same Render workspace.
 - `GET /book`: the printable story book (`templates/book.html`, `page.book_data()`). It shows a gold cover with arches, a contents list, and every story oldest first, with no `test` stories and no concerns. Print CSS puts the cover and contents on their own pages and keeps each story on one page. It's read-only, so it can't affect calls. Linked from the story book section and the footer.
 
 ### Google Sheet tabs (the app creates them on startup)
@@ -228,7 +228,7 @@ README.md
 - **OpenWeather:** create a key. New keys can take up to 2 hours to activate.
 - **Google Sheet:** create the Sheet and set "anyone with the link" to Viewer. Paste `apps_script/Code.gs` into Extensions > Apps Script, set its `SECRET`, and deploy it as a web app (Execute as: Me, Who has access: Anyone). Copy the `/exec` URL. After any later edit to the script, deploy a new version. No Google Cloud project is needed.
 - **Render:** create a Free web service from the GitHub repo. Build command `pip install -r requirements.txt`, start command `gunicorn app:app`, health check path `/health`. Add the environment variables.
-- **Uptime pinger** (e.g. UptimeRobot, free): check `/health` every 10 minutes.
+- **Uptime alerts (optional):** the app keeps itself awake. A free UptimeRobot check on `/health` adds an email if the site ever goes down during judging.
 
 ## Build plan
 
@@ -280,7 +280,7 @@ Frank, his family and his stories are fictional. Never add real names, places or
 
 ## Judging-week checklist
 
-- The uptime pinger is running.
+- Render's logs show `Keep-awake on: visiting .../health` after each deploy, and no run of `Keep-awake visit failed` lines.
 - Don't push to main during judging unless you're fixing a real bug, because every push redeploys.
 - Check the Vapi credit and Twilio balances, and Linq's contact count, daily. Keep auto-recharge off everywhere.
 - After judging, release the Twilio number so it stops billing monthly.
