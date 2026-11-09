@@ -46,6 +46,21 @@ def friendly_time(timestamp: str) -> str:
     return f"{local.strftime('%b')} {local.day} at {clock}"
 
 
+def _local(timestamp: str) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat((timestamp or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    zone = calls._local_zone()
+    return moment.astimezone(zone) if zone else moment
+
+
+def book_date(timestamp: str) -> str:
+    """'2026-11-09T21:12:00Z' -> 'November 9, 2026' (Eastern). Empty if unknown."""
+    local = _local(timestamp)
+    return f"{local.strftime('%B')} {local.day}, {local.year}" if local else ""
+
+
 def friendly_duration(seconds: str) -> str:
     """'130' -> '2 min 10 s'. Empty if unknown."""
     try:
@@ -88,6 +103,40 @@ def _plan_for_page(plan: dict) -> dict:
         story = plan["story"]
         return {"kind": "story", "text": story.get("title", "").strip(), "anchor": f"story-{story.get('_row', '')}"}
     return {"kind": "topic", "text": plan["topic"]}
+
+
+def book_data() -> dict:
+    """Everything templates/book.html needs: every story, oldest first, laid
+    out like a keepsake. Concerns stay out; they're for the family to check,
+    not for the book. Never raises."""
+    rows, ok = _rows("stories")
+    stories = calls.memory_stories(rows)
+    months = []
+    for s in stories:
+        local = _local(s.get("timestamp", ""))
+        if local:
+            months.append((local.year, local.month, f"{local.strftime('%B')} {local.year}"))
+    months.sort()
+    if not months:
+        collected = ""
+    elif months[0][2] == months[-1][2]:
+        collected = months[0][2]
+    else:
+        collected = f"{months[0][2]} to {months[-1][2]}"
+    entries = []
+    for number, s in enumerate(stories, start=1):
+        told_on = book_date(s.get("timestamp", ""))
+        entries.append({
+            "number": number,
+            "title": s.get("title", "").strip() or "Untitled story",
+            "summary": s.get("summary", "").strip(),
+            "people": s.get("people", "").strip(),
+            "places": s.get("places", "").strip(),
+            "told": (f"Told on a call on {told_on}" if s.get("source") == "call" and told_on
+                     else "One of the stories he told before Storyline"),
+        })
+    return {"name": config.GRANDPA_NAME, "stories": entries, "ok": ok,
+            "count": _count(len(entries), "story", "stories"), "collected": collected}
 
 
 def page_data() -> dict:

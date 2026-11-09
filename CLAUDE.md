@@ -54,6 +54,7 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Linq (se
 - `POST /webhooks/linq`: inbound texts and photos from Linq (`message.received`)
 - `POST /webhooks/vapi`: Vapi server messages. Only `end-of-call-report` matters.
 - `GET /health`: returns 200 "ok". An uptime pinger hits it every 10 minutes so Render never puts the app to sleep.
+- `GET /book`: the printable story book (`templates/book.html`, `page.book_data()`). It shows a gold cover with arches, a contents list, and every story oldest first, with no `test` stories and no concerns. Print CSS puts the cover and contents on their own pages and keeps each story on one page. It's read-only, so it can't affect calls. Linked from the story book section and the footer.
 
 ### Google Sheet tabs (the app creates them on startup)
 
@@ -156,7 +157,7 @@ Built (Nov 2026): `services/page.py` gathers everything in parallel and never ra
 **Look** (the Storyline design system: https://claude.ai/artifact/UaANqeiqiRdzg3bCa7xCBD, private to the builder):
 - **Color:** Pittsburgh's black and gold, light theme only (`color-scheme: light`), so every judge and the demo video see the same page.
 - **Two big blocks:** the gold (`#f2b01e`, bridge gold) call card, in the hero's right column next to the wordmark and the call's spoken opening line, and the ink "What's working right now" panel with gold checks.
-- **Bridge arches:** cut into the foot of both blocks, 3 on the card and 5 on the panel (3 on phones). Use them nowhere else.
+- **Bridge arches:** cut into the foot of both blocks, 3 on the card and 5 on the panel (3 on phones), plus 3 on the story book's gold cover. Use them nowhere else.
 - **Small blocks:** gold-light and brick bleed off the top of the page, as on the design system's cover.
 - **Layout:** photos and the story book are split sections, with the heading on the left and the content on the right.
 - **Brick:** used only for concerns and errors, apart from the small top block.

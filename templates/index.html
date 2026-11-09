@@ -143,6 +143,7 @@
       <div class="split-head">
         <h2 id="stories-heading">{{ page.name }}&rsquo;s story book</h2>
         <p class="lede">Every story Storyline has saved, newest first. After each call, the family also gets the new story by text.</p>
+        <p class="book-link"><a href="{{ url_for('book') }}">Open the printable story book</a></p>
       </div>
 
       <div class="split-body">
@@ -174,6 +175,7 @@
     <footer class="footer">
       <p class="links">
         {% if page.sheet_url %}<a href="{{ page.sheet_url }}" target="_blank" rel="noopener">See every story, photo and call in the Google Sheet</a> (view only).{% endif %}
+        <a href="{{ url_for('book') }}">Print {{ page.name }}&rsquo;s story book</a>.
         <a href="{{ page.github_url }}" target="_blank" rel="noopener">Read the code on GitHub</a>.
       </p>
       <p>Grandpa {{ page.name }}, his family and his stories are made up for this demo.</p>

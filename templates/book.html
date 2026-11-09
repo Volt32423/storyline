@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grandpa {{ book.name }}&rsquo;s Story Book</title>
+  <meta name="description" content="Every story Grandpa {{ book.name }} told Storyline, ready to print or save as a PDF.">
+  <meta name="theme-color" content="#f2b01e">
+  <meta name="color-scheme" content="light">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400..800;1,7..72,400..600&family=Public+Sans:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=css_version) }}">
+</head>
+<body>
+  <div class="book">
+    <nav class="toolbar" aria-label="Story book">
+      <a href="{{ url_for('index') }}#stories">Back to Storyline</a>
+      <button class="button" type="button" onclick="window.print()">Print or save as PDF</button>
+    </nav>
+
+    <header class="book-cover">
+      <div class="slab" aria-hidden="true">
+        <span class="arches"><i></i><i></i><i></i></span>
+      </div>
+      <h1>Grandpa {{ book.name }}&rsquo;s Story Book</h1>
+      <p class="subtitle">The stories he told Storyline, saved for the family.</p>
+      <p class="collected">{{ book.count|capitalize }}{% if book.collected %}, collected {{ book.collected }}{% endif %}</p>
+    </header>
+
+    {% if book.stories %}
+      <nav class="contents" aria-labelledby="contents-heading">
+        <h2 id="contents-heading">Contents</h2>
+        <ol>
+          {% for story in book.stories %}
+            <li><a href="#story-{{ story.number }}">{{ story.title|curly }}</a></li>
+          {% endfor %}
+        </ol>
+      </nav>
+
+      <main>
+        {% for story in book.stories %}
+          <article class="book-story" id="story-{{ story.number }}">
+            <p class="number">Story {{ story.number }}</p>
+            <h2>{{ story.title|curly }}</h2>
+            <p class="told">{{ story.told }}</p>
+            <p class="summary">{{ story.summary|curly }}</p>
+            {% if story.people or story.places %}
+              <dl class="facts">
+                {% if story.people %}<dt>People</dt><dd>{{ story.people|curly }}</dd>{% endif %}
+                {% if story.places %}<dt>Places</dt><dd>{{ story.places|curly }}</dd>{% endif %}
+              </dl>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </main>
+    {% elif not book.ok %}
+      <p class="empty book-empty">The story book can&rsquo;t be loaded right now. Try again in a minute.</p>
+    {% else %}
+      <p class="empty book-empty">No stories yet. The first call adds one.</p>
+    {% endif %}
+
+    <footer class="book-end">
+      <p>Grandpa {{ book.name }}, his family and his stories are made up for this demo.</p>
+    </footer>
+  </div>
+</body>
+</html>

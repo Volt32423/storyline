@@ -106,6 +106,13 @@ def index():
     )
 
 
+@app.get("/book")
+def book():
+    """Frank's story book as a keepsake: every story, oldest first, ready to
+    print or save as a PDF from the browser."""
+    return render_template("book.html", book=page.book_data(), css_version=CSS_VERSION)
+
+
 @app.post("/call")
 def call():
     if not config.get("DEMO_CODE"):

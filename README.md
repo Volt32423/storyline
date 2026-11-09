@@ -21,6 +21,7 @@ That's what Storyline does. Each call asks him about his life. When a memory is 
 2. Under **Try it**, enter your US phone number and the demo code from our submission, then press **Call me as Grandpa Frank**. You'll play Frank, a made-up grandfather in his 80s. The page shows the exact line the call will open with and which memory it will bring up, plus a short cheat sheet about Frank.
 3. Talk for a minute or two, then hang up. Your story appears in **Frank's story book** within a minute or two (refresh the page).
 4. Optional: under **Photos Storyline has seen**, text an old photo to the number shown, or upload one. You'll see what Claude saw in it, and the next call asks Frank about it.
+5. Optional: open **the printable story book** (`/book`, linked from the story book section). It holds every story Frank has told, oldest first, laid out like a keepsake the family can print or save as a PDF.
 
 Calls are capped at 3 minutes, and at 3 per number per day.
 
@@ -44,6 +45,7 @@ The page's **What's working right now** panel shows live proof for each one.
 - [x] Step 2: saving the story after the call. Test without a phone call: open `/test/story?code=DEMO_CODE` (shows Claude's story, saves nothing) or `/test/story?code=DEMO_CODE&save=1` (also saves it to the Sheet as source "test", which calls never bring up). Or run `python scripts/replay_vapi.py` to test the webhook itself.
 - [x] Step 3: photos by text (Linq) and upload. Test without texting: the upload form on the page, or `python scripts/replay_linq.py URL --photo IMAGE_URL`. One-time Linq webhook setup: `/setup/linq?code=DEMO_CODE`.
 - [x] Step 4: the judge-ready page: the call card with the call's live opening line, the superpowers panel with live proof, the photos Claude has seen, and Frank's story book. Page data is cached for 60 seconds, and the page still loads if the Sheet or the weather is down.
+- [x] The printable story book (`/book`): a cover, contents, and every story oldest first. "Print or save as PDF" gives clean pages. Concern notes stay out of the keepsake.
 
 ## Running it yourself
 
