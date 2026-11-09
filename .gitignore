@@ -1,0 +1,16 @@
+# Secrets
+.env
+*.json
+# ...except scrubbed test fixtures
+!tests/fixtures/*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

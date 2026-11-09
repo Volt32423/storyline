@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Storyline</title>
+  <meta name="description" content="Storyline helps a grandfather with a fading memory revisit and save his life stories.">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">Applied AI final project</p>
+      <h1>Storyline</h1>
+      <p class="pitch">Helping a grandfather with a fading memory revisit and save his life stories.</p>
+    </header>
+
+    <section class="card">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li><strong>A friendly call.</strong> Storyline phones Grandpa {{ grandpa_name }} and gently brings back one memory at a time, never quizzing him.</li>
+        <li><strong>Old photos.</strong> Family members text an old photo, and the next call asks him about it.</li>
+        <li><strong>A family story book.</strong> Every story is saved so the whole family can keep it.</li>
+      </ol>
+    </section>
+
+    <section class="card notice">
+      <h2>Coming this week</h2>
+      <p>The live demo opens here soon. You'll be able to play Grandpa {{ grandpa_name }} and get a call yourself.</p>
+    </section>
+
+    <footer class="footer">
+      <p>
+        <strong>About texting:</strong> people who text Storyline's number{% if linq_number %} ({{ linq_number }}){% endif %}
+        agree to receive replies and story updates from Storyline. Reply STOP at any time to stop messages.
+      </p>
+      <p>Grandpa {{ grandpa_name }} and his stories are fictional, made up for this demo.</p>
+    </footer>
+  </main>
+</body>
+</html>
