@@ -1,10 +1,18 @@
 """Storyline: Flask routes only. The real work lives in services/."""
 
 import logging
+import tempfile
+import threading
+from pathlib import Path
 
 from flask import Flask, render_template
 
-from services import config
+from services import config, knowledge
+
+try:
+    import fcntl  # Linux/macOS only; Render runs Linux
+except ImportError:  # pragma: no cover (Windows)
+    fcntl = None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,6 +21,26 @@ logging.basicConfig(
 log = logging.getLogger("storyline")
 
 app = Flask(__name__)
+
+
+def _set_up_sheet() -> None:
+    """On startup, create the Sheet's tabs and seed stories if they're missing.
+    A file lock keeps two gunicorn workers from seeding at the same moment."""
+    if not (config.get("GOOGLE_SHEET_ID") and config.get("GOOGLE_SERVICE_ACCOUNT_JSON")):
+        log.warning("Sheet not set up yet: add GOOGLE_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON")
+        return
+    lock_path = Path(tempfile.gettempdir()) / "storyline-sheet-setup.lock"
+    try:
+        with open(lock_path, "w") as lock:
+            if fcntl:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+            added = knowledge.seed_sheet()
+        log.info("Sheet ready (%d seed stories added)", added)
+    except Exception:
+        log.exception("Sheet setup failed. Check the Google variables and that the Sheet is shared with the service account")
+
+
+threading.Thread(target=_set_up_sheet, name="sheet-setup", daemon=True).start()
 
 
 @app.get("/")

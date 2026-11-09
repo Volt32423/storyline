@@ -59,14 +59,14 @@ Open http://localhost:8000 (gunicorn) or http://localhost:5000 (`python app.py`)
 
 1. In Google Cloud, create a project, enable the **Google Sheets API** and the **Google Drive API**, then create a service account and download its JSON key.
 2. Create an empty Google Sheet. Share it with the service account's email (`client_email` in the key) as **Editor**, and set "Anyone with the link" to **Viewer**.
-3. Put the whole JSON key on one line in `GOOGLE_SERVICE_ACCOUNT_JSON`, and the Sheet's id (the long string between `/d/` and `/edit` in its URL) in `GOOGLE_SHEET_ID`.
-4. Run `.venv/bin/python scripts/seed_sheet.py`. It creates the `stories`, `photos` and `calls` tabs and loads Frank's seed stories. It's safe to run again. Add `--dry-run` to preview the seed stories without touching the Sheet.
+3. Put the key file's contents in `GOOGLE_SERVICE_ACCOUNT_JSON` (on Render, paste the whole file; in a local `.env`, put it on one line), and the Sheet's id (the long string between `/d/` and `/edit` in its URL) in `GOOGLE_SHEET_ID`.
+4. That's it. Every time the app starts, it creates any missing `stories`, `photos` and `calls` tabs and adds Frank's seed stories if they aren't there yet. Render's logs show `Sheet ready` when it worked. To do the same by hand, run `.venv/bin/python scripts/seed_sheet.py` (add `--dry-run` to preview the seed stories without touching the Sheet).
 
 ### Deploy on Render
 
 1. Create a **Web Service** from this GitHub repo and choose the **Free** instance type.
 2. Build command: `pip install -r requirements.txt`. Start command: `gunicorn app:app`. Health check path: `/health`.
-3. Add every variable from `.env.example` in the Environment tab. Python 3.12 comes from `.python-version`.
+3. Add the variables from `.env.example` in the Environment section. Python 3.12 comes from `.python-version`.
 
 ## Limits
 

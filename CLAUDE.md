@@ -53,13 +53,13 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Linq (se
 - `POST /webhooks/vapi`: Vapi server messages. Only `end-of-call-report` matters.
 - `GET /health`: returns 200 "ok". An uptime pinger hits it every 10 minutes so Render never puts the app to sleep.
 
-### Google Sheet tabs (create them with `scripts/seed_sheet.py`)
+### Google Sheet tabs (the app creates them on startup)
 
 - `stories`: timestamp, title, summary, people, places, concern, source (seed or call), call_id
 - `photos`: timestamp, source (text or upload), description, question, asked (TRUE/FALSE)
 - `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason
 
-`seed_sheet.py` also loads the stories under "Stories Frank has already told" in `knowledge/profile.md` into `stories`, with source = seed.
+On every startup, `app.py` runs `knowledge.seed_sheet()` in a background thread: it creates any missing tabs and loads the stories under "Stories Frank has already told" in `knowledge/profile.md` into `stories`, with source = seed, skipping titles already there. A file lock stops two gunicorn workers from seeding at once. `scripts/seed_sheet.py` does the same by hand.
 
 Only ever store the **last 4 digits** of a phone number. The Sheet is shared view-only with anyone who has the link, so judges can see it.
 
@@ -172,7 +172,9 @@ PUBLIC_BASE_URL=               # the Render URL, no trailing slash
 ```
 app.py                  # Flask routes only
 services/
+  config.py             # settings from env vars (and a local .env)
   sheets.py             # every Google Sheet read and write
+  knowledge.py          # load profile.md, parse and seed Frank's stories
   claude_ai.py          # photo description + story summary
   calls.py              # build the prompt, start the Vapi call
   weather.py
@@ -181,7 +183,7 @@ knowledge/profile.md    # Frank's fictional profile + seed stories (already writ
 templates/index.html
 static/style.css
 scripts/
-  seed_sheet.py         # create tabs and headers, load the seed stories
+  seed_sheet.py         # same setup as startup, by hand (--dry-run to preview)
   replay_vapi.py        # POST a saved end-of-call-report to a running app
   replay_linq.py        # POST a saved message.received payload to a running app
 tests/fixtures/         # saved payloads, phone numbers scrubbed
@@ -198,14 +200,14 @@ README.md
 - **Anthropic Console:** create an API key.
 - **OpenWeather:** create a key. New keys can take up to 2 hours to activate.
 - **Google Cloud:** create a service account and its JSON key, and enable the Sheets and Drive APIs. Share the Sheet with the service account as Editor, and set "anyone with the link" to Viewer.
-- **Render:** connect the GitHub repo, set the start command to `gunicorn app:app`, and add the environment variables.
+- **Render:** create a Free web service from the GitHub repo. Build command `pip install -r requirements.txt`, start command `gunicorn app:app`, health check path `/health`. Add the environment variables (paste the whole service account JSON file into `GOOGLE_SERVICE_ACCOUNT_JSON`).
 - **Uptime pinger** (e.g. UptimeRobot, free): check `/health` every 10 minutes.
 
 ## Build plan
 
 Do one step at a time. Finish each step by passing its "done when" check, then commit to git.
 
-0. **Sunday: skeleton.** Scaffold the repo with `/health` and a placeholder page, and deploy to Render. Make `seed_sheet.py` create the tabs.
+0. **Sunday: skeleton.** Scaffold the repo with `/health` and a placeholder page, and deploy to Render. The app creates the Sheet's tabs and seed stories on startup.
    *Done when the Render URL loads and the Sheet has its tabs and Frank's seed stories.*
 1. **Monday: the call.** Weather, profile and stories go into the prompt, then the Vapi outbound call starts.
    *Done when the builder's phone rings and the AI mentions the weather and retells a seed story without quizzing.*
