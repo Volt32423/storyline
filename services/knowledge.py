@@ -16,6 +16,31 @@ def profile_text() -> str:
     return PROFILE.read_text(encoding="utf-8")
 
 
+def profile_for_prompt() -> str:
+    """The profile without its seed-story section: saved stories come from the
+    Sheet instead, so they'd otherwise appear twice in the call prompt."""
+    # Drop the "> Fictional..." note too: it's for people reading the file, and
+    # the AI shouldn't tell callers that Frank is made up.
+    text = "\n".join(line for line in profile_text().splitlines() if not line.startswith(">"))
+    start = text.find(SECTION)
+    if start == -1:
+        return text.strip()
+    rest = text[start + len(SECTION):]
+    next_section = re.search(r"^## ", rest, flags=re.MULTILINE)
+    tail = rest[next_section.start():] if next_section else ""
+    return (text[:start] + tail).strip()
+
+
+def new_topics() -> list[str]:
+    """Bullets under 'Topics he hasn't talked about yet'."""
+    match = re.search(r"^## Topics he hasn't talked about yet\s*$(.*?)(?=^## |\Z)",
+                      profile_text(), flags=re.MULTILINE | re.DOTALL)
+    if not match:
+        return []
+    return [line.strip()[2:].strip() for line in match.group(1).splitlines()
+            if line.strip().startswith("- ")]
+
+
 def parse_seed_stories(text: str | None = None) -> list[dict]:
     """Return [{title, people, places, summary}, ...] from the profile's
     'Stories Frank has already told' section."""

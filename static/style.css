@@ -66,6 +66,54 @@ h2 {
 .card.notice { background: var(--accent-soft); border-color: transparent; }
 .card p { margin: 0; }
 
+.card p + p { margin-top: 12px; }
+
+.cheat {
+  padding: 12px 16px;
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 8px;
+}
+
+.status {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 600;
+}
+.status.ok { background: #e3f1e4; color: #1f5a27; }
+.status.error { background: #fbe4e1; color: #8a2a1d; }
+
+.call-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.call-form label { display: grid; gap: 6px; font-size: 16px; font-weight: 600; }
+.call-form input {
+  font: inherit;
+  font-size: 19px;
+  font-weight: 400;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.call-form button {
+  font: inherit;
+  font-size: 19px;
+  font-weight: 700;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.call-form button:hover { filter: brightness(1.05); }
+
 .steps { margin: 0; padding-left: 22px; }
 .steps li + li { margin-top: 10px; }
 
@@ -86,4 +134,6 @@ h2 {
     --accent-soft: #3a2b22;
     --line: #3b322b;
   }
+  .status.ok { background: #1f3a23; color: #cdebd1; }
+  .status.error { background: #4a2420; color: #f6d3cd; }
 }

@@ -33,7 +33,7 @@ _Coming soon._ You'll enter your phone number and the demo code from our submiss
 ## Status
 
 - [x] Step 0: skeleton (`/health`, placeholder page, Sheet setup script)
-- [ ] Step 1: the outbound call
+- [x] Step 1: the outbound call (`POST /call`; preview the next call at `/call/preview?code=DEMO_CODE`)
 - [ ] Step 2: saving the story after the call
 - [ ] Step 3: photos by text and upload
 - [ ] Step 4: the judge-ready page

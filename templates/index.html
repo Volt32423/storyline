@@ -24,9 +24,26 @@
       </ol>
     </section>
 
-    <section class="card notice">
-      <h2>Coming this week</h2>
-      <p>The live demo opens here soon. You'll be able to play Grandpa {{ grandpa_name }} and get a call yourself.</p>
+    <section class="card try" id="try">
+      <h2>Try it</h2>
+      <p>You'll play Grandpa {{ grandpa_name }}, a made-up grandfather in his 80s whose memory is fading. Enter your number and the demo code from our submission, and you'll get a call within seconds. Calls are capped at 3 minutes.</p>
+      <p class="cheat">Frank grew up near Pittsburgh, worked in a steel mill, then delivered mail. His late wife was June. Make up the rest!</p>
+
+      {% if status %}
+        <p class="status {{ status[0] }}" role="status">{{ status[1] }}</p>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('call') }}" class="call-form">
+        <label>
+          Your phone number (US)
+          <input type="tel" name="phone" autocomplete="tel" placeholder="(412) 555-0123" required>
+        </label>
+        <label>
+          Demo code
+          <input type="text" name="code" autocomplete="off" required>
+        </label>
+        <button type="submit">Call me as Grandpa {{ grandpa_name }}</button>
+      </form>
     </section>
 
     <footer class="footer">

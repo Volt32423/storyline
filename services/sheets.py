@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 TABS = {
     "stories": ["timestamp", "title", "summary", "people", "places", "concern", "source", "call_id"],
     "photos": ["timestamp", "source", "description", "question", "asked"],
-    "calls": ["timestamp", "phone_last4", "status", "duration_seconds", "ended_reason"],
+    "calls": ["timestamp", "phone_last4", "status", "duration_seconds", "ended_reason", "call_id"],
 }
 
 TIMEOUT_SECONDS = 30
@@ -76,7 +76,8 @@ def append(tab: str, record: dict) -> None:
 
 
 def rows(tab: str, use_cache: bool = False) -> list[dict]:
-    """All data rows of a tab as dicts keyed by header (every value is text).
+    """All data rows of a tab as dicts keyed by header (every value is text),
+    plus "_row": the row's number in the Sheet, for update_cell.
     With use_cache, the result may be up to CACHE_SECONDS old (for page loads)."""
     if use_cache:
         hit = _cache.get(tab)
@@ -84,11 +85,13 @@ def rows(tab: str, use_cache: bool = False) -> list[dict]:
             return hit[1]
     values = _call("rows", tab=tab)["values"]
     headers = TABS[tab]
-    records = [
-        dict(zip(headers, row + [""] * (len(headers) - len(row))))
-        for row in values[1:]
-        if any(cell.strip() for cell in row)
-    ]
+    records = []
+    for index, row in enumerate(values[1:], start=2):
+        if not any(cell.strip() for cell in row):
+            continue
+        record = dict(zip(headers, row + [""] * (len(headers) - len(row))))
+        record["_row"] = index
+        records.append(record)
     _cache[tab] = (time.time(), records)
     return records
 

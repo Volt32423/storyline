@@ -58,7 +58,7 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Linq (se
 
 - `stories`: timestamp, title, summary, people, places, concern, source (seed or call), call_id
 - `photos`: timestamp, source (text or upload), description, question, asked (TRUE/FALSE)
-- `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason
+- `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason, call_id (Vapi's call id, so the webhook can find the row)
 
 On every startup, `app.py` runs `knowledge.seed_sheet()` in a background thread: it creates any missing tabs and loads the stories under "Stories Frank has already told" in `knowledge/profile.md` into `stories`, with source = seed, skipping titles already there. A file lock stops two gunicorn workers from seeding at once. `scripts/seed_sheet.py` does the same by hand.
 
@@ -74,10 +74,9 @@ Only ever store the **last 4 digits** of a phone number. The Sheet is shared vie
    - a **transient assistant defined in code**, so the prompt lives in git
    - `maxDurationSeconds` = 180
    - server URL `PUBLIC_BASE_URL/webhooks/vapi`, set to send only `end-of-call-report` messages
-   - our own ids (the photo row, for example) in the call metadata, so the webhook can match the call up later
-5. Write a `calls` row, mark the photo as asked, and show "Calling you now…" on the page.
+5. Write a `calls` row with Vapi's call id, mark the photo as asked, and redirect to the page with "Calling you now…".
 
-**Check every Vapi field name against docs.vapi.ai before using it. Don't guess.** Pick a fast, inexpensive model and a warm, slow-paced voice from the ones Vapi lists, because every minute costs credits.
+**Check every Vapi field name against docs.vapi.ai before using it. Don't guess.** Built and verified (Nov 2026): `assistant` = name, firstMessage, model {provider `anthropic`, model `claude-haiku-5-5`, messages [system], tools [{type `endCall`, messages [{type `request-start`, content}]}]}, voice {provider `vapi`, voiceId `Leah`}, maxDurationSeconds, server {url}, serverMessages. Model and voice can be changed with the optional `VAPI_*` env vars. Plan rotation: a pending photo first, otherwise the stories in turn (call count modulo story count). `GET /call/preview?code=DEMO_CODE` returns the next call's first message and prompt as JSON without dialing.
 
 ### The call prompt
 
