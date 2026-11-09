@@ -34,9 +34,9 @@ The page's **What's working right now** panel shows live proof for each one.
 | Voice | Vapi calls you and has a warm, patient conversation | Your phone rings; the panel shows the last call |
 | Texting | Linq: text an old photo in, and the family gets each new story by text | Photos Storyline has seen; the family's phone |
 | Vision | Claude describes each photo and writes a gentle question about it. Only the description is kept, never the photo | "What Claude saw" on each photo; the next call says it looked at the photo and asks about it |
-| Knowledge | Frank's profile plus every saved story go into each call | The call retells a past story; the panel names the next one |
+| Knowledge | Before every call, Storyline reads Frank's life profile (`knowledge/profile.md`, a knowledge file) plus every story he has told, so it can retell them and fill in what he forgets | The call retells a past story and reminds Frank of details; the panel names the next story |
 | Real-world data | OpenWeather: today's weather in Pittsburgh | The call's first line, shown on the page and said on the call |
-| Actions | Every story, photo and call is written to a Google Sheet | The view-only Sheet link on the page |
+| Actions | Claude acts on its own: after each call it saves the story with a `save_story` tool call and flags anything the family should check on, and during the call it hangs up kindly with the `endCall` tool. Every story, photo and call goes into a Google Sheet | The panel shows Claude's latest action; the view-only Sheet link |
 
 ## Status
 

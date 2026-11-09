@@ -184,6 +184,21 @@ def page_data() -> dict:
     else:
         knowledge_line = f"Next call starts a new story about {plan['topic']}."
 
+    # The newest thing Claude did on its own: a story it saved with its
+    # save_story tool, and whether it flagged a concern for the family.
+    latest_saved = next((s for s in reversed(stories) if s.get("source") == "call"), None)
+    counts = (f"{_count(len(stories), 'story', 'stories')}, {_count(len(photo_rows), 'photo')} "
+              f"and {_count(len(call_rows), 'call')} saved so far.")
+    if not sheet_ok:
+        actions_line = "The Sheet can't be reached right now."
+    elif latest_saved:
+        actions_line = (f"Latest: Claude saved “{latest_saved.get('title', '').strip()}” "
+                        f"{friendly_time(latest_saved.get('timestamp', ''))}"
+                        f"{' and flagged a concern for the family' if latest_saved.get('concern', '').strip() else ''}. "
+                        f"{counts}")
+    else:
+        actions_line = counts
+
     powers = [
         {"name": "Voice", "ok": bool(last_call),
          "what": f"Storyline phones you and has a slow, patient conversation as if you were {name}.",
@@ -196,17 +211,17 @@ def page_data() -> dict:
          "evidence": (f"Latest: “{_shorten(last_photo.get('description', ''), 120)}”"
                       if last_photo else "No photos yet. Text or upload one below.")},
         {"name": "Knowledge", "ok": stories_ok,
-         "what": f"Every call knows {name}'s life story and each story he has told before.",
+         "what": (f"Before every call, Storyline reads {name}'s life profile, a knowledge file, "
+                  f"plus every story he has told, so it can retell them and fill in what he forgets."),
          "evidence": knowledge_line},
         {"name": "Real-world data", "ok": bool(today),
          "what": f"Every call opens with today's weather in {city}, from OpenWeather.",
          "evidence": (f"Right now in {city}: {today['temp']}°F and {today['description']}."
                       if today else "The weather is unavailable right now, so calls skip it.")},
         {"name": "Actions", "ok": sheet_ok,
-         "what": "Every story, photo and call is saved to the family's Google Sheet.",
-         "evidence": (f"{_count(len(stories), 'story', 'stories')}, {_count(len(photo_rows), 'photo')} "
-                      f"and {_count(len(call_rows), 'call')} saved so far."
-                      if sheet_ok else "The Sheet can't be reached right now."),
+         "what": ("After each call, Claude saves the story with a tool call and flags anything the "
+                  "family should check on. Every story, photo and call goes into the family's Google Sheet."),
+         "evidence": actions_line,
          "link": sheet_url},
     ]
 
