@@ -9,7 +9,12 @@ from services import config
 log = logging.getLogger(__name__)
 
 SUMMARY_MODEL = "claude-haiku-5-5"
-TIMEOUT_SECONDS = 60
+# Haiku 5.5 defaults to "medium". The docs recommend "high" for strict
+# instruction following; "xhigh"/"max" are for long agent tasks. Thinking is
+# on by default (adaptive), counts toward max_tokens, and works with the
+# forced tool below.
+SUMMARY_EFFORT = "high"
+TIMEOUT_SECONDS = 90
 
 _client = None
 
@@ -68,7 +73,8 @@ def summarize_call(transcript: str) -> dict | None:
     try:
         response = _anthropic().messages.create(
             model=SUMMARY_MODEL,
-            max_tokens=1000,
+            max_tokens=4096,  # room for thinking plus the story
+            output_config={"effort": SUMMARY_EFFORT},
             system=SUMMARY_SYSTEM,
             tools=[STORY_TOOL],
             tool_choice={"type": "tool", "name": "save_story"},

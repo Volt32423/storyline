@@ -34,7 +34,7 @@ _Coming soon._ You'll enter your phone number and the demo code from our submiss
 
 - [x] Step 0: skeleton (`/health`, placeholder page, Sheet setup script)
 - [x] Step 1: the outbound call (`POST /call`; preview the next call at `/call/preview?code=DEMO_CODE`)
-- [x] Step 2: saving the story after the call (test without a phone call: `python scripts/replay_vapi.py`)
+- [x] Step 2: saving the story after the call. Test without a phone call: open `/test/story?code=DEMO_CODE` (shows Claude's story, saves nothing) or `/test/story?code=DEMO_CODE&save=1` (also saves it to the Sheet as source "test", which calls never bring up). Or run `python scripts/replay_vapi.py` to test the webhook itself.
 - [ ] Step 3: photos by text and upload
 - [ ] Step 4: the judge-ready page
 

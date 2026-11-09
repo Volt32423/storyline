@@ -104,7 +104,9 @@ def build_context() -> dict:
     """Everything the call needs: weather, stories, a pending photo, and the plan.
     A Sheet or weather failure never stops a call; it just has less to say."""
     try:
-        stories = sheets.rows("stories")
+        # Stories saved by the /test/story link are for checking the setup,
+        # not memories, so calls never bring them up.
+        stories = [s for s in sheets.rows("stories") if s.get("source") != "test"]
     except Exception as error:
         log.error("Couldn't load stories for the call: %s", error)
         stories = []
@@ -361,9 +363,10 @@ def _update_call_row(call_id: str, duration: int | None, ended_reason: str) -> N
     log.warning("No calls row for call %s (a replay, or the row wasn't saved)", call_id)
 
 
-def handle_end_of_call(message: dict) -> dict | None:
+def handle_end_of_call(message: dict, source: str = "call") -> dict | None:
     """Save the story from a finished call. Runs in a background thread.
-    Returns the saved story, or None when there was nothing to save."""
+    Returns the saved story, or None when there was nothing to save.
+    source is "call" for real calls and "test" for the /test/story link."""
     call_id = (message.get("call") or {}).get("id") or ""
     duration = call_duration(message)
     ended_reason = message.get("endedReason") or ""
@@ -405,7 +408,7 @@ def handle_end_of_call(message: dict) -> dict | None:
         "people": story.get("people", "").strip(),
         "places": story.get("places", "").strip(),
         "concern": story.get("concern", "").strip(),
-        "source": "call",
+        "source": source,
         "call_id": call_id,
     }
     try:

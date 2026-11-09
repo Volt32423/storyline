@@ -1,6 +1,7 @@
 """Storyline: Flask routes only. The real work lives in services/."""
 
 import hmac
+import json
 import logging
 import tempfile
 import threading
@@ -9,7 +10,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
-from services import calls, config, knowledge, sheets
+from services import calls, claude_ai, config, knowledge, sheets
 
 try:
     import fcntl  # Linux/macOS only; Render runs Linux
@@ -21,8 +22,12 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 log = logging.getLogger("storyline")
+for noisy in ("httpx", "httpx2", "httpcore"):  # one line per HTTP request is too chatty
+    logging.getLogger(noisy).setLevel(logging.WARNING)
 
 app = Flask(__name__)
+
+SAMPLE_CALL = config.ROOT / "tests" / "fixtures" / "end_of_call_report.json"
 
 
 SETUP_TRIES = 30
@@ -120,6 +125,26 @@ def call_preview():
         "model": assistant["model"]["model"],
         "voice": assistant["voice"],
     })
+
+
+@app.get("/test/story")
+def test_story():
+    """Check the story step without a phone call: runs a sample call transcript
+    through Claude and shows the result. Add &save=1 to also save it to the
+    Sheet (as source "test", which calls never bring up). Needs the demo code."""
+    if not _code_ok(request.args.get("code", "")):
+        abort(403)
+    message = json.loads(SAMPLE_CALL.read_text(encoding="utf-8"))["message"]
+    if request.args.get("save") == "1":
+        message["call"]["id"] = f"test-{int(time.time())}"
+        story = calls.handle_end_of_call(message, source="test")
+        if not story:
+            return jsonify({"ok": False, "error": "Nothing was saved. Check Render's logs for the reason."}), 500
+        return jsonify({"ok": True, "saved_to_sheet": True, "story": story})
+    story = claude_ai.summarize_call(calls.call_transcript(message))
+    if not story:
+        return jsonify({"ok": False, "error": "Claude didn't answer. Check ANTHROPIC_API_KEY and Render's logs."}), 500
+    return jsonify({"ok": True, "saved_to_sheet": False, "story": story})
 
 
 @app.post("/webhooks/vapi")
