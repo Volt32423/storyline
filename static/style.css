@@ -1,139 +1,412 @@
+/* Storyline. Tokens match the Storyline design system (tokens.json).
+   Gold is Pittsburgh's bridge gold and means one thing: the call.
+   Literata is for Frank's world (stories, what's said); Public Sans is for
+   the machinery (forms, evidence, times). */
+
 :root {
-  --bg: #fbf6ee;
-  --card: #ffffff;
-  --ink: #2e2620;
-  --muted: #6f6257;
-  --accent: #b5562f;
-  --accent-soft: #f4e2d6;
-  --line: #eadfd2;
-  --radius: 16px;
-}
+  color-scheme: light dark;
 
-* { box-sizing: border-box; }
+  --paper: #fcfaf6;
+  --paper-raised: #ffffff;
+  --line: #e4dccd;
+  --line-strong: #8c8377;
+  --ink: #24211d;
+  --ink-muted: #5f5850;
+  --gold: #f2b01e;
+  --gold-light: #f8cd62;
+  --gold-soft: #fbecc2;
+  --on-gold: #24211d;
+  --field: #fffdf8;
+  --button: #24211d;
+  --on-button: #fcfaf6;
+  --brick: #a23b21;
+  --brick-soft: #f8e2da;
+  --brick-on-field: #a23b21; /* same in both themes: fields in the gold card stay light */
+  --ok: #2f6a3f;
+  --ok-soft: #e2f0e4;
+  --focus: #24211d;
+  --shadow-print: 0 1px 2px rgba(36, 33, 29, 0.08), 0 8px 24px rgba(36, 33, 29, 0.07);
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--ink);
-  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
-  font-size: 19px;
-  line-height: 1.6;
-}
+  --font-serif: "Literata", Georgia, "Times New Roman", serif;
+  --font-sans: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 
-.page {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 48px 16px 64px;
-}
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 72px;
 
-.hero { margin-bottom: 32px; }
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: var(--accent);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-h1 {
-  margin: 0;
-  font-size: clamp(44px, 9vw, 64px);
-  line-height: 1.05;
-}
-
-.pitch {
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size: 22px;
-}
-
-h2 {
-  margin: 0 0 12px;
-  font-size: 24px;
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 24px;
-  margin-bottom: 20px;
-}
-
-.card.notice { background: var(--accent-soft); border-color: transparent; }
-.card p { margin: 0; }
-
-.card p + p { margin-top: 12px; }
-
-.cheat {
-  padding: 12px 16px;
-  border-left: 4px solid var(--accent);
-  background: var(--accent-soft);
-  border-radius: 8px;
-}
-
-.status {
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-weight: 600;
-}
-.status.ok { background: #e3f1e4; color: #1f5a27; }
-.status.error { background: #fbe4e1; color: #8a2a1d; }
-
-.call-form {
-  display: grid;
-  gap: 14px;
-  margin-top: 18px;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-.call-form label { display: grid; gap: 6px; font-size: 16px; font-weight: 600; }
-.call-form input {
-  font: inherit;
-  font-size: 19px;
-  font-weight: 400;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
-  color: var(--ink);
-}
-.call-form button {
-  font: inherit;
-  font-size: 19px;
-  font-weight: 700;
-  padding: 14px 18px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-}
-.call-form button:hover { filter: brightness(1.05); }
-
-.steps { margin: 0; padding-left: 22px; }
-.steps li + li { margin-top: 10px; }
-
-.footer {
-  margin-top: 32px;
-  color: var(--muted);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 15px;
+  --radius-print: 3px;
+  --radius-control: 10px;
+  --radius-card: 24px;
+  --radius-pill: 999px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1f1a16;
-    --card: #2a231e;
-    --ink: #f3ebe2;
-    --muted: #c3b5a7;
-    --accent: #e08a5f;
-    --accent-soft: #3a2b22;
-    --line: #3b322b;
+    --paper: #1b1916;
+    --paper-raised: #25221e;
+    --line: #3a352f;
+    --line-strong: #8a8178;
+    --ink: #f3eee6;
+    --ink-muted: #bcb2a5;
+    --gold-soft: #3b3018;
+    --button: #f3eee6;
+    --on-button: #1b1916;
+    --brick: #f2896b;
+    --brick-soft: #43231b;
+    --ok: #9ad2a8;
+    --ok-soft: #1f3526;
+    --focus: #f2b01e;
+    --shadow-print: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
   }
-  .status.ok { background: #1f3a23; color: #cdebd1; }
-  .status.error { background: #4a2420; color: #f6d3cd; }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 1.65;
+  font-optical-sizing: auto;
+}
+
+p, li, dd { text-wrap: pretty; }
+h1, h2, h3 { text-wrap: balance; }
+
+a { color: inherit; text-decoration-color: var(--gold); text-decoration-thickness: 3px; text-underline-offset: 4px; }
+a:hover { text-decoration-color: currentColor; }
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4) var(--space-7);
+}
+
+/* ---------- hero ---------- */
+
+.wordmark {
+  margin: 0;
+  font-size: clamp(56px, 14vw, 96px);
+  font-weight: 760;
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+}
+
+.pitch {
+  max-width: 34ch;
+  text-wrap: balance;
+  margin: var(--space-4) 0 0;
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+/* ---------- section headings ---------- */
+
+.section { margin-top: var(--space-8); }
+
+.section > h2,
+.call-card h2 {
+  margin: 0;
+  font-size: clamp(30px, 6vw, 36px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
+.lede { max-width: 60ch; margin: var(--space-3) 0 0; color: var(--ink-muted); }
+
+/* ---------- the call card: the one gold thing ---------- */
+
+.call-card {
+  margin-top: var(--space-7);
+  padding: var(--space-6);
+  border-radius: var(--radius-card);
+  background: var(--gold);
+  color: var(--on-gold);
+  --focus: var(--on-gold);
+}
+.call-card a { text-decoration-color: currentColor; }
+
+.call-card .intro { max-width: 60ch; margin: var(--space-3) 0 0; }
+
+.cheat {
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--gold-light);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.55;
+}
+.cheat strong { font-weight: 700; }
+
+.opening { margin: var(--space-6) 0 0; }
+.opening-label {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
+}
+.opening blockquote {
+  margin: var(--space-2) 0 0;
+  font-size: 24px;
+  line-height: 1.5;
+  font-style: italic;
+  text-indent: -0.42em;
+}
+.opening .then {
+  margin: var(--space-3) 0 0;
+  font-family: var(--font-sans);
+  font-size: 17px;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  font-family: var(--font-sans);
+}
+.form .fields { display: grid; gap: var(--space-4); grid-template-columns: 3fr 2fr; }
+.form label { display: grid; gap: var(--space-2); font-size: 17px; font-weight: 600; line-height: 1.3; }
+
+.form input {
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-3) var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--paper-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 400;
+}
+.form input[type="file"] { padding: var(--space-3); font-size: 17px; }
+
+.call-card .form input {
+  border: 2px solid var(--on-gold);
+  background: var(--field);
+  color: var(--on-gold);
+}
+
+.button {
+  min-height: 60px;
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--button);
+  color: var(--on-button);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.call-card .button { background: var(--on-gold); color: var(--field); }
+.button:disabled { cursor: progress; opacity: 0.75; }
+
+.status {
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-control);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.status.ok { background: var(--ok-soft); color: var(--ok); }
+.status.error { background: var(--brick-soft); color: var(--brick); }
+.call-card .status.ok { background: var(--field); color: var(--on-gold); }
+.call-card .status.error { background: var(--field); color: var(--brick-on-field); }
+
+/* ---------- what's working: the six superpowers ---------- */
+
+.powers { margin: var(--space-5) 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+
+.power {
+  display: grid;
+  grid-template-columns: 32px 10.5rem 1fr;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-top: 1px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+.mark.on { background: var(--ink); color: var(--paper); }
+.mark.off { border: 2px solid var(--line-strong); color: var(--ink-muted); }
+
+.power h3 { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.6; }
+.power .what { margin: 0; }
+.power .evidence {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.power .evidence a { font-weight: 600; }
+
+/* ---------- photos: snapshot prints holding what Claude saw ---------- */
+
+.share { margin-top: var(--space-5); }
+.share .text-us { margin: 0; font-size: 22px; line-height: 1.45; }
+.share .text-us strong { font-weight: 700; white-space: nowrap; }
+.share details { margin-top: var(--space-4); font-family: var(--font-sans); font-size: 17px; }
+.share summary { cursor: pointer; font-weight: 600; text-decoration: underline; text-decoration-color: var(--gold); text-decoration-thickness: 3px; text-underline-offset: 4px; }
+
+.prints {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+  margin: var(--space-6) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.print {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-print);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-print);
+}
+.print .saw-label,
+.print .ask-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+.print .saw { margin: var(--space-1) 0 0; font-size: 19px; line-height: 1.55; }
+.print .ask-label { margin-top: var(--space-4); }
+.print .ask { margin: var(--space-1) 0 0; font-size: 19px; line-height: 1.55; font-style: italic; }
+.print .meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-5);
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.chip.waiting { background: var(--gold-soft); color: var(--ink); }
+.chip.asked { background: var(--ok-soft); color: var(--ok); }
+
+/* ---------- the story book ---------- */
+
+.stories { margin: var(--space-5) 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+
+.story { padding: var(--space-6) 0; border-bottom: 1px solid var(--line); scroll-margin-top: var(--space-5); }
+.story:target { background: var(--gold-soft); box-shadow: 0 0 0 var(--space-4) var(--gold-soft); }
+.story h3 { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+.story .told { margin: var(--space-1) 0 0; color: var(--ink-muted); font-family: var(--font-sans); font-size: 15px; }
+.story .summary { max-width: 62ch; margin: var(--space-4) 0 0; }
+.story .facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+.story .facts dt { color: var(--ink-muted); font-weight: 600; }
+.story .facts dd { margin: 0; }
+.story .concern {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--brick-soft);
+  color: var(--brick);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.empty {
+  margin: var(--space-5) 0 0;
+  padding: var(--space-5);
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-control);
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 17px;
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  margin-top: var(--space-8);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.footer p { max-width: 70ch; margin: 0; }
+.footer p + p { margin-top: var(--space-3); }
+.footer .links { color: var(--ink); font-size: 17px; font-weight: 600; }
+
+/* ---------- small screens ---------- */
+
+@media (max-width: 640px) {
+  body { font-size: 19px; }
+  .page { padding-top: var(--space-7); }
+  .pitch { font-size: 21px; }
+  .call-card { margin-left: calc(-1 * var(--space-2)); margin-right: calc(-1 * var(--space-2)); padding: var(--space-5); border-radius: 18px; }
+  .opening blockquote { font-size: 21px; }
+  .form .fields { grid-template-columns: 1fr; }
+  .power { grid-template-columns: 32px 1fr; }
+  .power .body { grid-column: 1 / -1; }
+  .prints { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; }
 }

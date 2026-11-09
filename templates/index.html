@@ -5,80 +5,187 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Storyline</title>
   <meta name="description" content="Storyline helps a grandfather with a fading memory revisit and save his life stories.">
+  <meta name="theme-color" content="#f2b01e">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400..800;1,7..72,400..600&family=Public+Sans:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <main class="page">
-    <header class="hero">
-      <p class="eyebrow">Applied AI final project</p>
-      <h1>Storyline</h1>
+    <header>
+      <h1 class="wordmark">Storyline</h1>
       <p class="pitch">Helping a grandfather with a fading memory revisit and save his life stories.</p>
     </header>
 
-    <section class="card">
-      <h2>How it works</h2>
-      <ol class="steps">
-        <li><strong>A friendly call.</strong> Storyline phones Grandpa {{ grandpa_name }} and gently brings back one memory at a time, never quizzing him.</li>
-        <li><strong>Old photos.</strong> Family members text an old photo, and the next call asks him about it.</li>
-        <li><strong>A family story book.</strong> Every story is saved so the whole family can keep it.</li>
-      </ol>
-    </section>
-
-    <section class="card try" id="try">
-      <h2>Try it</h2>
-      <p>You'll play Grandpa {{ grandpa_name }}, a made-up grandfather in his 80s whose memory is fading. Enter your number and the demo code from our submission, and you'll get a call within seconds. Calls are capped at 3 minutes.</p>
-      <p class="cheat">Frank grew up near Pittsburgh, worked in a steel mill, then delivered mail. His late wife was June. Make up the rest!</p>
-
+    <section class="call-card" id="try" aria-labelledby="try-heading">
+      <h2 id="try-heading">Try it</h2>
       {% if call_status %}
         <p class="status {{ call_status[0] }}" role="status">{{ call_status[1] }}</p>
       {% endif %}
+      <p class="intro">You’ll play Grandpa {{ page.name }}, a made-up grandfather in his 80s whose memory is fading. Enter your number and the demo code from our submission, and you’ll get a call within seconds. Calls are capped at 3 minutes.</p>
+      <p class="cheat"><strong>Playing {{ page.name }}:</strong> {{ page.name }} grew up near Pittsburgh, worked in a steel mill, then delivered mail. His late wife was June. Make up the rest!</p>
 
-      <form method="post" action="{{ url_for('call') }}" class="call-form">
-        <label>
-          Your phone number (US)
-          <input type="tel" name="phone" autocomplete="tel" placeholder="(412) 555-0123" required>
-        </label>
-        <label>
-          Demo code
-          <input type="text" name="code" autocomplete="off" required>
-        </label>
-        <button type="submit">Call me as Grandpa {{ grandpa_name }}</button>
+      <div class="opening">
+        <p class="opening-label">Your call will open like this:</p>
+        <blockquote>&ldquo;{{ page.opening_line|curly }}&rdquo;</blockquote>
+        <p class="then">
+          {%- if page.next.kind == "story" -%}
+            Then it brings back a story {{ page.name }} told before: <a href="#{{ page.next.anchor }}">&ldquo;{{ page.next.text|curly }}&rdquo;</a>.
+          {%- elif page.next.kind == "photo" -%}
+            Then it describes the newest photo the family sent and asks: &ldquo;{{ page.next.text|curly }}&rdquo;
+          {%- else -%}
+            Then it asks about {{ page.next.text|curly }}.
+          {%- endif -%}
+        </p>
+      </div>
+
+      <form method="post" action="{{ url_for('call') }}" class="form" data-busy="Starting your call&hellip;">
+        <div class="fields">
+          <label>
+            Your phone number (US)
+            <input type="tel" name="phone" autocomplete="tel" inputmode="tel" placeholder="(412) 555-0123" required>
+          </label>
+          <label>
+            Demo code
+            <input type="text" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+          </label>
+        </div>
+        <button class="button" type="submit">Call me as Grandpa {{ page.name }}</button>
       </form>
     </section>
 
-    <section class="card" id="photos">
-      <h2>Share an old photo</h2>
-      {% if linq_number %}
-        <p><strong>Text an old photo to {{ linq_number }}.</strong> Storyline describes it, and the next call asks Grandpa {{ grandpa_name }} about it.</p>
-        <p>Or upload one here:</p>
-      {% else %}
-        <p>Upload an old photo. Storyline describes it, and the next call asks Grandpa {{ grandpa_name }} about it.</p>
-      {% endif %}
+    <section class="section" id="working" aria-labelledby="working-heading">
+      <h2 id="working-heading">What&rsquo;s working right now</h2>
+      <p class="lede">Storyline uses six AI superpowers. Each row shows the latest proof, live from the app.</p>
+      <ul class="powers">
+        {% for power in page.powers %}
+          <li class="power">
+            <span class="mark {{ 'on' if power.ok else 'off' }}" aria-hidden="true">{{ "&#10003;"|safe if power.ok }}</span>
+            <h3>{{ power.name }}<span class="visually-hidden">{{ ", working" if power.ok else ", no proof yet" }}</span></h3>
+            <div class="body">
+              <p class="what">{{ power.what|curly }}</p>
+              <p class="evidence">
+                {{- power.evidence|curly -}}
+                {%- if power.link %} <a href="{{ power.link }}" target="_blank" rel="noopener">Open the Sheet (view only)</a>{% endif -%}
+              </p>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="section" id="photos" aria-labelledby="photos-heading">
+      <h2 id="photos-heading">Photos Storyline has seen</h2>
+      <p class="lede">Storyline doesn&rsquo;t keep the photo itself. Claude looks at it, writes down what it sees and one gentle question, and the next call asks Grandpa {{ page.name }} about it.</p>
 
       {% if photo_status %}
         <p class="status {{ photo_status[0] }}" role="status">{{ photo_status[1] }}</p>
       {% endif %}
 
-      <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="call-form">
-        <label>
-          Photo
-          <input type="file" name="photo" accept="image/*" required>
-        </label>
-        <label>
-          Demo code
-          <input type="text" name="code" autocomplete="off" required>
-        </label>
-        <button type="submit">Share this photo</button>
-      </form>
+      <div class="share">
+        {% if page.linq_number %}
+          <p class="text-us">Text an old photo to <a href="{{ page.linq_sms }}"><strong>{{ page.linq_number }}</strong></a>, or upload one here.</p>
+        {% else %}
+          <p class="text-us">Upload an old photo here.</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="form" data-busy="Claude is looking at your photo&hellip;">
+          <div class="fields">
+            <label>
+              Photo
+              <input type="file" name="photo" accept="image/*" required>
+            </label>
+            <label>
+              Demo code
+              <input type="text" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            </label>
+          </div>
+          <button class="button" type="submit">Share this photo</button>
+        </form>
+      </div>
+
+      {% if page.photos %}
+        <ul class="prints">
+          {% for photo in page.photos %}
+            <li class="print">
+              <p class="saw-label">What Claude saw</p>
+              <p class="saw">{{ photo.description|curly }}</p>
+              <p class="ask-label">Question for {{ page.name }}</p>
+              <p class="ask">&ldquo;{{ photo.question|curly }}&rdquo;</p>
+              <p class="meta">
+                <span>{{ photo.how }} {{ photo.when }}</span>
+                {% if photo.asked %}
+                  <span class="chip asked">Asked on a call</span>
+                {% else %}
+                  <span class="chip waiting">Waiting for the next call</span>
+                {% endif %}
+              </p>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">No photos yet. Share one above, and what Claude sees in it shows up here.</p>
+      {% endif %}
+    </section>
+
+    <section class="section" id="stories" aria-labelledby="stories-heading">
+      <h2 id="stories-heading">{{ page.name }}&rsquo;s story book</h2>
+      <p class="lede">Every story Storyline has saved, newest first. After each call, the family also gets the new story by text.</p>
+
+      {% if page.stories %}
+        <ul class="stories">
+          {% for story in page.stories %}
+            <li class="story" id="{{ story.anchor }}">
+              <h3>{{ story.title|curly }}</h3>
+              <p class="told">{{ story.told }}</p>
+              <p class="summary">{{ story.summary|curly }}</p>
+              {% if story.people or story.places %}
+                <dl class="facts">
+                  {% if story.people %}<dt>People</dt><dd>{{ story.people|curly }}</dd>{% endif %}
+                  {% if story.places %}<dt>Places</dt><dd>{{ story.places|curly }}</dd>{% endif %}
+                </dl>
+              {% endif %}
+              {% if story.concern %}
+                <p class="concern">Worth checking on: {{ story.concern|curly }}</p>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">No stories yet. The first call adds one.</p>
+      {% endif %}
     </section>
 
     <footer class="footer">
-      <p>
-        <strong>About texting:</strong> people who text Storyline's number{% if linq_number %} ({{ linq_number }}){% endif %}
-        agree to receive replies and story updates from Storyline. Reply STOP at any time to stop messages.
+      <p class="links">
+        {% if page.sheet_url %}<a href="{{ page.sheet_url }}" target="_blank" rel="noopener">See every story, photo and call in the Google Sheet</a> (view only).{% endif %}
+        <a href="{{ page.github_url }}" target="_blank" rel="noopener">Read the code on GitHub</a>.
       </p>
-      <p>Grandpa {{ grandpa_name }} and his stories are fictional, made up for this demo.</p>
+      <p>Grandpa {{ page.name }}, his family and his stories are made up for this demo.</p>
+      <p>
+        About texting: people who text Storyline&rsquo;s number{% if page.linq_number %} ({{ page.linq_number }}){% endif %}
+        agree to get replies and story updates from Storyline. Reply STOP at any time to stop messages.
+      </p>
     </footer>
   </main>
+
+  <script>
+    // Show that something is happening while the call starts or Claude reads
+    // the photo, and stop a second click from starting a second call.
+    document.querySelectorAll("form[data-busy]").forEach(function (form) {
+      form.addEventListener("submit", function () {
+        var button = form.querySelector("button[type=submit]");
+        button.dataset.label = button.textContent;
+        button.textContent = form.dataset.busy;
+        button.disabled = true;
+      });
+    });
+    window.addEventListener("pageshow", function () {
+      document.querySelectorAll("button[data-label]").forEach(function (button) {
+        button.textContent = button.dataset.label;
+        button.disabled = false;
+      });
+    });
+  </script>
 </body>
 </html>

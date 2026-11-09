@@ -10,7 +10,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
-from services import calls, claude_ai, config, knowledge, photos, sheets, texting
+from services import calls, claude_ai, config, knowledge, page, photos, sheets, texting
 
 try:
     import fcntl  # Linux/macOS only; Render runs Linux
@@ -27,6 +27,7 @@ for noisy in ("httpx", "httpx2", "httpcore"):  # one line per HTTP request is to
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # uploads bigger than 20 MB are refused
+app.jinja_env.filters["curly"] = page.curly  # it's -> it’s on the page
 
 SAMPLE_CALL = config.ROOT / "tests" / "fixtures" / "end_of_call_report.json"
 LINQ_WEBHOOK_VERSION = "2026-02-03"  # the payload shape services/photos.py reads
@@ -67,14 +68,16 @@ threading.Thread(target=_set_up_sheet, name="sheet-setup", daemon=True).start()
 
 
 MESSAGES = {
-    "calling": ("ok", "Calling you now. Pick up and say hello to Storyline!"),
+    "calling": ("ok", "Calling you now. Pick up and say hello! After you hang up, your story "
+                      "appears in the story book below within a minute or two. Refresh to see it."),
     "bad_code": ("error", "That demo code isn't right. It's in our project submission."),
     "bad_number": ("error", "Please enter a 10-digit US phone number."),
     "limit_number": ("error", "That number has had 3 calls today. Please try again tomorrow."),
     "limit_day": ("error", "Storyline has made all its calls for today. Please try again tomorrow."),
     "not_ready": ("error", "Calls aren't switched on yet. Please try again later."),
     "call_failed": ("error", "Sorry, the call couldn't be started. Please try again in a minute."),
-    "photo_ok": ("ok", "Got it! Storyline will ask Grandpa Frank about this photo on the next call."),
+    "photo_ok": ("ok", "Got it! Claude looked at your photo. What it saw is below, and the next "
+                       "call asks Grandpa Frank about it."),
     "photo_bad": ("error", "Please choose a photo file (under 20 MB)."),
     "photo_bad_code": ("error", "That demo code isn't right. It's in our project submission."),
     "photo_failed": ("error", "Sorry, that photo couldn't be used. Please try a different one."),
@@ -92,8 +95,7 @@ def index():
     status = MESSAGES.get(msg)
     return render_template(
         "index.html",
-        grandpa_name=config.GRANDPA_NAME,
-        linq_number=config.get("LINQ_PHONE_NUMBER"),
+        page=page.page_data(),
         call_status=status if status and not msg.startswith("photo") else None,
         photo_status=status if status and msg.startswith("photo") else None,
     )
@@ -144,7 +146,7 @@ def test_story():
         abort(403)
     message = json.loads(SAMPLE_CALL.read_text(encoding="utf-8"))["message"]
     if request.args.get("save") == "1":
-        message["call"]["id"] = f"test-{int(time.time())}"
+        message["call"]["id"] = f"test-{int(time.time() * 1000)}"
         story = calls.handle_end_of_call(message, source="test")
         if not story:
             return jsonify({"ok": False, "error": "Nothing was saved. Check Render's logs for the reason."}), 500

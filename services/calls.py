@@ -100,36 +100,48 @@ def check_limits(phone_e164: str) -> None:
 
 # ---------- what this call is about ----------
 
+def memory_stories(stories: list[dict]) -> list[dict]:
+    """Stories saved by the /test/story link are for checking the setup, not
+    memories, so calls and the story book leave them out."""
+    return [s for s in stories if s.get("source") != "test"]
+
+
+def choose_plan(stories: list[dict], photos: list[dict], call_count: int) -> dict:
+    """The one memory the next call is about: the newest photo no call has
+    asked about yet, else his saved stories in turn (so repeat calls bring
+    back different ones), else a topic he hasn't talked about yet."""
+    pending = [p for p in photos if p.get("asked", "").upper() != "TRUE"]
+    if pending:
+        return {"kind": "photo", "photo": pending[-1]}
+    if stories:
+        return {"kind": "story", "story": stories[call_count % len(stories)]}
+    topics = knowledge.new_topics() or ["the neighborhood where he grew up"]
+    return {"kind": "topic", "topic": topics[0]}
+
+
+def plan_summary(plan: dict) -> str:
+    """One line saying what a call is about, for the calls tab and the page."""
+    if plan["kind"] == "photo":
+        description = plan["photo"].get("description", "").strip()
+        short = description if len(description) <= 90 else description[:87].rstrip() + "..."
+        return f"Asked about a photo: {short}"
+    if plan["kind"] == "story":
+        return f"Retold \"{plan['story'].get('title', '').strip()}\""
+    return f"New topic: {plan['topic']}"
+
+
 def build_context() -> dict:
     """Everything the call needs: weather, stories, a pending photo, and the plan.
     A Sheet or weather failure never stops a call; it just has less to say."""
-    try:
-        # Stories saved by the /test/story link are for checking the setup,
-        # not memories, so calls never bring them up.
-        stories = [s for s in sheets.rows("stories") if s.get("source") != "test"]
-    except Exception as error:
-        log.error("Couldn't load stories for the call: %s", error)
-        stories = []
-    try:
-        pending = [p for p in sheets.rows("photos") if p.get("asked", "").upper() != "TRUE"]
-    except Exception as error:
-        log.error("Couldn't load photos for the call: %s", error)
-        pending = []
-    photo = pending[-1] if pending else None
-
-    if photo:
-        plan = {"kind": "photo", "photo": photo}
-    elif stories:
-        # Rotate through his stories so repeat calls bring back different ones.
+    loaded = {}
+    for tab in ("stories", "photos", "calls"):
         try:
-            call_count = len(sheets.rows("calls"))
-        except Exception:
-            call_count = 0
-        plan = {"kind": "story", "story": stories[call_count % len(stories)]}
-    else:
-        topics = knowledge.new_topics() or ["the neighborhood where he grew up"]
-        plan = {"kind": "topic", "topic": topics[0]}
-
+            loaded[tab] = sheets.rows(tab)
+        except Exception as error:
+            log.error("Couldn't load %s for the call: %s", tab, error)
+            loaded[tab] = []
+    stories = memory_stories(loaded["stories"])
+    plan = choose_plan(stories, loaded["photos"], len(loaded["calls"]))
     return {"weather": weather.current(), "stories": stories, "plan": plan}
 
 
@@ -157,10 +169,11 @@ def _plan_text(plan: dict, name: str) -> str:
     if plan["kind"] == "photo":
         p = plan["photo"]
         return (
-            f"A family member just sent an old photo. After he answers your greeting, "
-            f"describe the photo to him in a sentence or two, then ask this question in "
-            f"your own words.\nThe photo: {p.get('description', '')}\n"
-            f"The question: {p.get('question', '')}"
+            f"His family just sent you an old photo, and you have looked at it. After he "
+            f"answers your greeting, tell him his family sent you a photo and you had a "
+            f"look at it. Describe what you saw in a sentence or two, then ask this "
+            f"question in your own words.\nWhat you saw in the photo: "
+            f"{p.get('description', '')}\nThe question: {p.get('question', '')}"
         )
     if plan["kind"] == "story":
         s = plan["story"]
@@ -305,6 +318,7 @@ def place_call(raw_phone: str) -> dict:
             "phone_last4": phone[-4:],
             "status": "started",
             "call_id": call_id,
+            "topic": plan_summary(ctx["plan"]),
         })
         if ctx["plan"]["kind"] == "photo":
             sheets.update_cell("photos", ctx["plan"]["photo"]["_row"], "asked", "TRUE")

@@ -17,18 +17,25 @@ That's what Storyline does. Each call asks him about his life. When a memory is 
 
 ## Try it (for judges)
 
-_Coming soon._ You'll enter your phone number and the demo code from our submission on the live site, then play Grandpa Frank when Storyline calls.
+1. Open the live site. Everything you need is on that one page, with no login.
+2. Under **Try it**, enter your US phone number and the demo code from our submission, then press **Call me as Grandpa Frank**. You'll play Frank, a made-up grandfather in his 80s. The page shows the exact line the call will open with and which memory it will bring up, plus a short cheat sheet about Frank.
+3. Talk for a minute or two, then hang up. Your story appears in **Frank's story book** within a minute or two (refresh the page).
+4. Optional: under **Photos Storyline has seen**, text an old photo to the number shown, or upload one. You'll see what Claude saw in it, and the next call asks Frank about it.
+
+Calls are capped at 3 minutes, and at 3 per number per day.
 
 ## The six superpowers
 
+The page's **What's working right now** panel shows live proof for each one.
+
 | Superpower | What it does here | Where to see it |
 |---|---|---|
-| Voice | Vapi calls you and has a warm, patient conversation | Your phone rings |
-| Texting | Linq: text an old photo in, and the family gets each new story by text | The photo appears on the site |
-| Vision | Claude describes each photo and writes a gentle question about it | The next call asks about the photo |
-| Knowledge | Frank's profile plus every saved story go into each call | The AI retells a past story |
-| Real-world data | OpenWeather: today's weather in Pittsburgh | The call opens with it |
-| Actions | Every story, photo and call is written to a Google Sheet | The Sheet link on the site |
+| Voice | Vapi calls you and has a warm, patient conversation | Your phone rings; the panel shows the last call |
+| Texting | Linq: text an old photo in, and the family gets each new story by text | Photos Storyline has seen; the family's phone |
+| Vision | Claude describes each photo and writes a gentle question about it. Only the description is kept, never the photo | "What Claude saw" on each photo; the next call says it looked at the photo and asks about it |
+| Knowledge | Frank's profile plus every saved story go into each call | The call retells a past story; the panel names the next one |
+| Real-world data | OpenWeather: today's weather in Pittsburgh | The call's first line, shown on the page and said on the call |
+| Actions | Every story, photo and call is written to a Google Sheet | The view-only Sheet link on the page |
 
 ## Status
 
@@ -36,7 +43,7 @@ _Coming soon._ You'll enter your phone number and the demo code from our submiss
 - [x] Step 1: the outbound call (`POST /call`; preview the next call at `/call/preview?code=DEMO_CODE`)
 - [x] Step 2: saving the story after the call. Test without a phone call: open `/test/story?code=DEMO_CODE` (shows Claude's story, saves nothing) or `/test/story?code=DEMO_CODE&save=1` (also saves it to the Sheet as source "test", which calls never bring up). Or run `python scripts/replay_vapi.py` to test the webhook itself.
 - [x] Step 3: photos by text (Linq) and upload. Test without texting: the upload form on the page, or `python scripts/replay_linq.py URL --photo IMAGE_URL`. One-time Linq webhook setup: `/setup/linq?code=DEMO_CODE`.
-- [ ] Step 4: the judge-ready page
+- [x] Step 4: the judge-ready page: the call card with the call's live opening line, the superpowers panel with live proof, the photos Claude has seen, and Frank's story book. Page data is cached for 60 seconds, and the page still loads if the Sheet or the weather is down.
 
 ## Running it yourself
 
@@ -79,5 +86,6 @@ If you change `Code.gs` later, the change only goes live after **Deploy > Manage
 
 ## Limits
 
-- Texting runs on Linq's free plan, which caps the number of contacts.
-- Calls are capped at 3 minutes.
+- Texting runs on Linq's free plan, which caps the number of contacts. If texting isn't available, the upload form does the same job for photos.
+- Calls are capped at 3 minutes, 3 per number per day, and `MAX_CALLS_PER_DAY` in total.
+- Storyline only replies to people who text it first, and never answers STOP, UNSUBSCRIBE and similar opt-out words.

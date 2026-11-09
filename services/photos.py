@@ -9,6 +9,8 @@ from services import claude_ai, config, sheets, texting
 
 log = logging.getLogger(__name__)
 
+STOP_WORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}  # never answered
+
 _seen_events: "OrderedDict[str, None]" = OrderedDict()
 _seen_lock = threading.Lock()
 
@@ -69,6 +71,10 @@ def handle_linq_event(event: dict) -> int:
     if from_us:
         return 0
     name = config.GRANDPA_NAME
+    words = " ".join(str(p.get("value", "")) for p in parts if p.get("type") == "text").strip()
+    if words.upper().strip(".! ") in STOP_WORDS:
+        log.info("Opt-out text from ...%s: not replying", sender[-4:])
+        return 0
     media = [p for p in parts if p.get("type") == "media" and p.get("url")]
     if not media:
         log.info("Text received from ...%s with no photo", sender[-4:])

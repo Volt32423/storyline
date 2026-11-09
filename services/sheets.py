@@ -22,7 +22,8 @@ log = logging.getLogger(__name__)
 TABS = {
     "stories": ["timestamp", "title", "summary", "people", "places", "concern", "source", "call_id"],
     "photos": ["timestamp", "source", "description", "question", "asked"],
-    "calls": ["timestamp", "phone_last4", "status", "duration_seconds", "ended_reason", "call_id"],
+    # topic: what the call was about, e.g. 'Asked about a photo: Two young men...'
+    "calls": ["timestamp", "phone_last4", "status", "duration_seconds", "ended_reason", "call_id", "topic"],
 }
 
 TIMEOUT_SECONDS = 30
@@ -94,6 +95,13 @@ def rows(tab: str, use_cache: bool = False) -> list[dict]:
         records.append(record)
     _cache[tab] = (time.time(), records)
     return records
+
+
+def cached(tab: str) -> list[dict] | None:
+    """The last rows read from a tab, however old, or None. Lets the page show
+    slightly stale data when the Sheet is briefly unreachable."""
+    hit = _cache.get(tab)
+    return hit[1] if hit else None
 
 
 def update_cell(tab: str, row_number: int, column: str, value) -> None:

@@ -59,7 +59,7 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Linq (se
 
 - `stories`: timestamp, title, summary, people, places, concern, source (seed or call), call_id
 - `photos`: timestamp, source (text or upload), description, question, asked (TRUE/FALSE)
-- `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason, call_id (Vapi's call id, so the webhook can find the row)
+- `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason, call_id (Vapi's call id, so the webhook can find the row), topic (what the call was about, e.g. `Asked about a photo: Two young men...` or `Retold "Rowboats at Pine Lake"`). `ensure_tabs` adds a new column's header on the next startup without redeploying the Apps Script.
 
 On every startup, `app.py` runs `knowledge.seed_sheet()` in a background thread: it creates any missing tabs and loads the stories under "Stories Frank has already told" in `knowledge/profile.md` into `stories`, with source = seed, skipping titles already there. A file lock stops two gunicorn workers from seeding at once. `scripts/seed_sheet.py` does the same by hand.
 
@@ -85,8 +85,8 @@ Only ever store the **last 4 digits** of a phone number. The Sheet is shared vie
 
 **First message.** Build it in code: greet him by name, say it's Storyline, the AI his grandson set up, say the call is saved for the family story book, and mention today's weather. For example: "Hi Frank, it's Storyline, the AI helper your grandson Sam set up to save your stories. This call goes into the family story book. I hear it's 48 and rainy in Pittsburgh today. Staying warm?"
 
-**One memory per call**, in this order:
-1. If a photo is waiting, describe what's in it and ask its question.
+**One memory per call**, in this order (`calls.choose_plan`, shared with the page so its "Then it..." line always matches the call):
+1. If a photo is waiting, say the family sent a photo and Storyline had a look at it, describe what it saw, and ask its question. This makes Vision audible on the call.
 2. Otherwise, retell a past story in a sentence or two and invite him to add to it.
 3. Otherwise, start a topic from "Topics he hasn't talked about yet" in the profile.
 
@@ -126,11 +126,14 @@ Built (Nov 2026): `services/texting.py` (Linq API: base `https://api.linqapp.com
 1. Verify the webhook signature the way Linq's Webhooks guide describes.
 2. Return 200 right away and do the work in a background thread. Use `event_id` to skip duplicate deliveries.
 3. Ignore everything except inbound `message.received` events. Pin the webhook version when creating the subscription, and check docs.linqapp.com for the exact payload.
-4. For each `media` part in the message's `parts`, download the image from its `url` (on `cdn.linqapp.com`). Send it to Claude (`claude-sonnet-5-5`) and ask for JSON:
+4. For each `media` part in the message's `parts`, download the image from its `url` (on `cdn.linqapp.com`). Send it to Claude (`claude-haiku-5-5`, see the note above) and ask for JSON:
    - description: 2 sentences covering who, what, where and clues to the era
    - question: one warm, open question for Frank that offers details rather than testing him. Good: "This looks like a lake in summer. What did you love about days like that?" Bad: "Do you remember who this is?"
 5. Append to `photos`.
 6. If `SMS_SENDING_ENABLED` is true, reply in the same chat: "Got it! Storyline will ask Grandpa Frank about this photo on the next call."
+7. Never reply to an opt-out text (STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT). Storyline only ever replies to people who texted it first.
+
+Photos are text only: Storyline never stores or shows the image, just Claude's description and question. Everywhere a photo comes up, the page and the call make it clear that Claude looked at it ("What Claude saw").
 
 `POST /upload` runs the same photo pipeline.
 
@@ -147,6 +150,10 @@ One clean, mobile-friendly page that a judge who knows nothing about the project
 - Links to the view-only Google Sheet and the GitHub repo
 
 Cache Sheet reads for 60 seconds so page loads don't hit Google's rate limits.
+
+Built (Nov 2026): `services/page.py` gathers everything in parallel and never raises. If the Sheet is down, it shows the last rows it read, and otherwise says plainly what's missing. Rows show a ✓ only when there's real, current evidence; otherwise they show a hollow circle and a sentence. The call card shows the call's real first message (live weather included) and what the next call will bring up, linked to that story. Photos show as "What Claude saw" prints: the six newest, with their question and an "Asked on a call" or "Waiting for the next call" chip. The story book leaves out `test` stories and flags concerns as "Worth checking on". A small script disables the submit button and shows a busy label, so a double click can't start two calls.
+
+**Look** (the Storyline design system: https://claude.ai/artifact/UaANqeiqiRdzg3bCa7xCBD, private to the builder). Gold `#f2b01e` (Pittsburgh's bridge gold) is used only for the call card. The page is warm white paper with graphite ink, and brick is used only for concerns and errors. Literata is for Frank's world (stories, headings, spoken lines); Public Sans is for the machinery (forms, evidence, times). Fonts come from Google Fonts with Georgia and system-ui fallbacks. The design tokens live at the top of `static/style.css`, and the design system's `tokens.json` and `bundle.css` are generated from that file. Change the CSS first, then regenerate the system.
 
 ## Environment variables
 
@@ -186,6 +193,7 @@ services/
   weather.py
   texting.py            # Linq send + webhook signature check
   photos.py             # photo pipeline shared by texts and uploads
+  page.py               # everything the home page shows (cached, never fails)
 knowledge/profile.md    # Frank's fictional profile + seed stories (already written)
 apps_script/Code.gs     # the Sheet bridge; pasted into the Sheet's Apps Script editor
 templates/index.html
