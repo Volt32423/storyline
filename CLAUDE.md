@@ -103,6 +103,8 @@ Only ever store the **last 4 digits** of a phone number. The Sheet is shared vie
 
 ### After the call (`POST /webhooks/vapi`)
 
+Built (Nov 2026): the webhook only accepts requests carrying `X-Storyline-Secret`, which the app sends to Vapi in `assistant.server.headers` (Vapi doesn't attach org credentials to transient assistants). The secret is derived from `SHEETS_WEBAPP_SECRET`; `VAPI_WEBHOOK_SECRET` overrides it. The summary uses a forced `save_story` tool call so the fields always come back, plus a `has_story` flag for calls with no memory. Duplicate reports for the same call id are saved once. `tests/fixtures/end_of_call_report.json` is a synthetic, documented-shape payload until a real one is saved.
+
 1. Return 200 right away and do the work in a background thread.
 2. Ignore every message type except `end-of-call-report`. The body is `{"message": {"type": ..., "call": ..., "artifact": ...}}`. Find the transcript in `message.artifact`, and check the docs for the exact field.
 3. Skip calls shorter than about 20 seconds, since there's no story to save.

@@ -9,6 +9,8 @@ Field names checked against docs.vapi.ai (Nov 2026):
 - provider "anthropic" offers "claude-haiku-5-5"; provider "vapi" offers voice "Leah"
 """
 
+import hashlib
+import hmac
 import logging
 import re
 from datetime import datetime
@@ -16,13 +18,36 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from services import config, knowledge, sheets, weather
+from services import claude_ai, config, knowledge, sheets, weather
 
 log = logging.getLogger(__name__)
 
 TIMEOUT_SECONDS = 20
 MAX_CALL_SECONDS = 180
 CALLS_PER_NUMBER_PER_DAY = 3
+MIN_STORY_SECONDS = 20
+WEBHOOK_HEADER = "X-Storyline-Secret"
+
+
+def webhook_secret() -> str:
+    """The value Vapi sends back in WEBHOOK_HEADER, so only Vapi can post
+    call reports. Derived from SHEETS_WEBAPP_SECRET, so there's nothing extra
+    to set up; VAPI_WEBHOOK_SECRET overrides it."""
+    explicit = config.get("VAPI_WEBHOOK_SECRET")
+    if explicit:
+        return explicit
+    base = config.get("SHEETS_WEBAPP_SECRET")
+    if not base:
+        return ""
+    return hmac.new(base.encode(), b"storyline-vapi-webhook", hashlib.sha256).hexdigest()[:40]
+
+
+def webhook_authorized(headers) -> bool:
+    expected = webhook_secret()
+    if not expected:
+        log.warning("No webhook secret configured, so the Vapi webhook isn't checked")
+        return True
+    return hmac.compare_digest(headers.get(WEBHOOK_HEADER, ""), expected)
 
 
 class CallError(Exception):
@@ -170,7 +195,8 @@ Let the conversation follow him from there. If he brings up a different memory, 
 - Never quiz him. Never ask "Do you remember...?" or ask him to recall names, dates or details. Offer the memory instead, then invite him to add to it. For example: "You told me once about renting rowboats at Pine Lake for 50 cents an hour. What was that summer like?"
 - If he can't recall something, warmly retell what he shared before and move on. Never make him feel he has failed.
 - Never correct him or argue about details. If his version differs from what's written below, go with his version.
-- Use short, simple sentences. Ask one question at a time. Leave room for pauses and let him talk.
+- Keep every turn short: one or two sentences, about 30 words at most. Then stop and let him answer. He should do most of the talking.
+- Use simple words. Ask one question at a time. Leave room for pauses; if he's quiet, wait, then gently offer a small detail from his story to help him along.
 - Before asking anything new, respond warmly and specifically to what he just said.
 - If he seems confused or upset, slow down, reassure him, and move to a happier memory, or wrap up kindly.
 - Speak about his late wife June warmly, and follow his lead.
@@ -220,6 +246,8 @@ def build_assistant(ctx: dict) -> dict:
     }
     if base_url:
         assistant["server"] = {"url": f"{base_url}/webhooks/vapi"}
+        if webhook_secret():
+            assistant["server"]["headers"] = {WEBHOOK_HEADER: webhook_secret()}
     else:
         log.warning("PUBLIC_BASE_URL isn't set, so this call's story won't be saved")
     return assistant
@@ -281,3 +309,109 @@ def place_call(raw_phone: str) -> dict:
     except Exception as error:
         log.error("Call started, but saving it to the Sheet failed: %s", error)
     return {"call_id": call_id, "plan": ctx["plan"]["kind"]}
+
+
+# ---------- after the call (POST /webhooks/vapi) ----------
+
+def _seconds_between(start: str, end: str) -> int | None:
+    try:
+        a = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        b = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return None
+    return max(0, round((b - a).total_seconds()))
+
+
+def call_duration(message: dict) -> int | None:
+    """Seconds the call lasted, from whichever field Vapi provided."""
+    for value in (message.get("durationSeconds"), (message.get("call") or {}).get("durationSeconds")):
+        if isinstance(value, (int, float)):
+            return round(value)
+    call = message.get("call") or {}
+    for source in (message, call):
+        seconds = _seconds_between(source.get("startedAt"), source.get("endedAt"))
+        if seconds is not None:
+            return seconds
+    return None
+
+
+def call_transcript(message: dict) -> str:
+    """The transcript text. Vapi puts it at message.artifact.transcript; fall
+    back to building it from artifact.messages (role + message)."""
+    artifact = message.get("artifact") or {}
+    text = artifact.get("transcript") or message.get("transcript") or ""
+    if text.strip():
+        return text.strip()
+    lines = []
+    for item in artifact.get("messages") or []:
+        role, said = item.get("role", ""), (item.get("message") or "").strip()
+        if not said or role in ("system", "tool_calls", "tool_call_result"):
+            continue
+        lines.append(f"{'User' if role == 'user' else 'AI'}: {said}")
+    return "\n".join(lines)
+
+
+def _update_call_row(call_id: str, duration: int | None, ended_reason: str) -> None:
+    for row in sheets.rows("calls"):
+        if row.get("call_id") == call_id:
+            sheets.update_cell("calls", row["_row"], "status", "ended")
+            sheets.update_cell("calls", row["_row"], "duration_seconds", "" if duration is None else duration)
+            sheets.update_cell("calls", row["_row"], "ended_reason", ended_reason)
+            return
+    log.warning("No calls row for call %s (a replay, or the row wasn't saved)", call_id)
+
+
+def handle_end_of_call(message: dict) -> dict | None:
+    """Save the story from a finished call. Runs in a background thread.
+    Returns the saved story, or None when there was nothing to save."""
+    call_id = (message.get("call") or {}).get("id") or ""
+    duration = call_duration(message)
+    ended_reason = message.get("endedReason") or ""
+    log.info("Call ended: %s after %ss (%s)", call_id or "(no id)", duration, ended_reason)
+
+    try:
+        _update_call_row(call_id, duration, ended_reason)
+    except Exception as error:
+        log.error("Couldn't update the calls row for %s: %s", call_id, error)
+
+    transcript = call_transcript(message)
+    if duration is not None and duration < MIN_STORY_SECONDS:
+        log.info("No story saved for %s: the call was only %ss", call_id, duration)
+        return None
+    if "User:" not in transcript:
+        artifact_keys = sorted((message.get("artifact") or {}).keys())
+        log.info("No story saved for %s: no words from Frank in the transcript (artifact has %s)",
+                 call_id, artifact_keys)
+        return None
+
+    try:
+        if call_id and any(s.get("call_id") == call_id for s in sheets.rows("stories")):
+            log.info("Story for %s is already saved (Vapi sent the report twice)", call_id)
+            return None
+    except Exception as error:
+        log.error("Couldn't check for an existing story: %s", error)
+
+    story = claude_ai.summarize_call(transcript)
+    if not story:
+        return None
+    if not story.get("has_story"):
+        log.info("No story saved for %s: Claude found no memory in the call", call_id)
+        return None
+
+    record = {
+        "timestamp": sheets.now_iso(),
+        "title": story.get("title", "").strip(),
+        "summary": story.get("summary", "").strip(),
+        "people": story.get("people", "").strip(),
+        "places": story.get("places", "").strip(),
+        "concern": story.get("concern", "").strip(),
+        "source": "call",
+        "call_id": call_id,
+    }
+    try:
+        sheets.append("stories", record)
+    except Exception as error:
+        log.error("Story '%s' couldn't be saved to the Sheet: %s", record["title"], error)
+        return None
+    log.info("Story saved: %s%s", record["title"], " (with a concern for the family)" if record["concern"] else "")
+    return record

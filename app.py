@@ -122,6 +122,26 @@ def call_preview():
     })
 
 
+@app.post("/webhooks/vapi")
+def vapi_webhook():
+    """Vapi posts here when a call ends. Answer right away; save the story
+    in the background so Vapi isn't kept waiting."""
+    if not calls.webhook_authorized(request.headers):
+        log.warning("Rejected a Vapi webhook with a missing or wrong secret header")
+        return jsonify({"error": "unauthorized"}), 401
+    message = (request.get_json(silent=True) or {}).get("message") or {}
+    if message.get("type") == "end-of-call-report":
+        threading.Thread(target=_safe_end_of_call, args=(message,), daemon=True).start()
+    return jsonify({"ok": True})
+
+
+def _safe_end_of_call(message: dict) -> None:
+    try:
+        calls.handle_end_of_call(message)
+    except Exception:
+        log.exception("Saving the story after the call failed")
+
+
 @app.get("/health")
 def health():
     return "ok", 200, {"Content-Type": "text/plain; charset=utf-8"}

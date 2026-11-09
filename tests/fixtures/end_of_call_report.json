@@ -1,0 +1,24 @@
+{
+  "message": {
+    "type": "end-of-call-report",
+    "endedReason": "assistant-ended-call",
+    "call": {
+      "id": "replay-call-1",
+      "type": "outboundPhoneCall",
+      "startedAt": "2026-11-09T15:00:00.000Z",
+      "endedAt": "2026-11-09T15:02:20.000Z",
+      "customer": { "number": "+10000000000" }
+    },
+    "artifact": {
+      "transcript": "AI: Hi Frank, it's Storyline, the AI helper your grandson Sam set up to save your stories. This call goes into the family story book. I hear it's 48 degrees with light rain in Pittsburgh today. Staying warm?\nUser: Oh, I'm doing alright. Got the heat on.\nAI: Good. You told me once about the snowstorm on Maple Hill, when you carried the mail up on foot. What was that walk like?\nUser: Cold! My boots were soaked through by the third house. But people needed their checks, you know. Old Mr. Duda gave me a scarf that day. Red wool. I wore it every winter after that.\nAI: A red wool scarf from Mr. Duda. That's a lovely thing to keep. Thank you for sharing that story, Frank.\nUser: Thank you, dear.",
+      "messages": [
+        { "role": "bot", "message": "Hi Frank, it's Storyline, the AI helper your grandson Sam set up to save your stories." },
+        { "role": "user", "message": "Oh, I'm doing alright. Got the heat on." },
+        { "role": "bot", "message": "Good. You told me once about the snowstorm on Maple Hill, when you carried the mail up on foot. What was that walk like?" },
+        { "role": "user", "message": "Cold! My boots were soaked through by the third house. But people needed their checks, you know. Old Mr. Duda gave me a scarf that day. Red wool. I wore it every winter after that." },
+        { "role": "bot", "message": "A red wool scarf from Mr. Duda. That's a lovely thing to keep. Thank you for sharing that story, Frank." },
+        { "role": "user", "message": "Thank you, dear." }
+      ]
+    }
+  }
+}
