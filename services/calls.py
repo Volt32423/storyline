@@ -94,7 +94,8 @@ def check_limits(phone_e164: str) -> None:
     if len(today) >= config.number("MAX_CALLS_PER_DAY", 15):
         raise CallError("limit_day")
     last4 = phone_e164[-4:]
-    if sum(1 for row in today if row.get("phone_last4") == last4) >= CALLS_PER_NUMBER_PER_DAY:
+    # Sheets stores "0123" as the number 123, so put the leading zeros back before comparing.
+    if sum(1 for row in today if str(row.get("phone_last4", "")).zfill(4) == last4) >= CALLS_PER_NUMBER_PER_DAY:
         raise CallError("limit_number")
 
 

@@ -101,7 +101,9 @@ function append_(ss, tab, values) {
 }
 
 function rows_(ss, tab) {
-  // Display values are all text, so "0412" stays "0412".
+  // Display values come back as text, but appendRow has already turned
+  // number-like text into numbers ("0412" reads back as "412"), so the app
+  // pads phone_last4 back to 4 digits before comparing.
   return { ok: true, values: sheet_(ss, tab).getDataRange().getDisplayValues() };
 }
 
