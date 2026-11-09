@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Flask, render_template
 
-from services import config, knowledge
+from services import config, knowledge, sheets
 
 try:
     import fcntl  # Linux/macOS only; Render runs Linux
@@ -26,8 +26,8 @@ app = Flask(__name__)
 def _set_up_sheet() -> None:
     """On startup, create the Sheet's tabs and seed stories if they're missing.
     A file lock keeps two gunicorn workers from seeding at the same moment."""
-    if not (config.get("GOOGLE_SHEET_ID") and config.get("GOOGLE_SERVICE_ACCOUNT_JSON")):
-        log.warning("Sheet not set up yet: add GOOGLE_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON")
+    if not sheets.is_configured():
+        log.warning("Sheet not set up yet: add SHEETS_WEBAPP_URL and SHEETS_WEBAPP_SECRET")
         return
     lock_path = Path(tempfile.gettempdir()) / "storyline-sheet-setup.lock"
     try:
@@ -37,7 +37,7 @@ def _set_up_sheet() -> None:
             added = knowledge.seed_sheet()
         log.info("Sheet ready (%d seed stories added)", added)
     except Exception:
-        log.exception("Sheet setup failed. Check the Google variables and that the Sheet is shared with the service account")
+        log.exception("Sheet setup failed. Check SHEETS_WEBAPP_URL, SHEETS_WEBAPP_SECRET and the script's deployment")
 
 
 threading.Thread(target=_set_up_sheet, name="sheet-setup", daemon=True).start()

@@ -28,7 +28,8 @@ This is a final project for an Applied AI class. **The deadline is Friday.** Jud
 ## Stack (don't add anything without asking)
 
 - Python 3.12, Flask, gunicorn
-- `anthropic` (Claude), `gspread` (Google Sheets), `requests` (for the Vapi, Linq and OpenWeather REST APIs)
+- `anthropic` (Claude) and `requests` (for the Vapi, Linq and OpenWeather REST APIs, and the Sheet bridge)
+- Google Sheets is reached through a small Apps Script web app inside the Sheet (`apps_script/Code.gs`), called with a shared secret. No Google Cloud project, no service account key, no `gspread`. The builder's Google project blocks key creation, so don't switch back.
 - Twilio is only the phone line behind Vapi. Our code never calls Twilio.
 - One HTML page: a Jinja template with plain CSS and a little JS. No frontend framework.
 - Hosting: a Render free web service, auto-deployed from the GitHub repo
@@ -160,8 +161,9 @@ OPENWEATHER_API_KEY=
 GRANDPA_NAME=Frank             # fictional
 GRANDPA_CITY=Pittsburgh,US     # real city, used for the weather
 BUILDER_NAME=Sam               # Frank's fictional grandson, who "set up" Storyline
-GOOGLE_SERVICE_ACCOUNT_JSON=   # the whole JSON key on one line; load with gspread.service_account_from_dict(json.loads(...))
-GOOGLE_SHEET_ID=
+SHEETS_WEBAPP_URL=             # the Apps Script web app URL, ending in /exec
+SHEETS_WEBAPP_SECRET=          # same string as SECRET in apps_script/Code.gs
+GOOGLE_SHEET_ID=               # only used for the view-only link
 DEMO_CODE=
 MAX_CALLS_PER_DAY=15
 PUBLIC_BASE_URL=               # the Render URL, no trailing slash
@@ -173,13 +175,14 @@ PUBLIC_BASE_URL=               # the Render URL, no trailing slash
 app.py                  # Flask routes only
 services/
   config.py             # settings from env vars (and a local .env)
-  sheets.py             # every Google Sheet read and write
+  sheets.py             # every Google Sheet read and write, via the Apps Script bridge
   knowledge.py          # load profile.md, parse and seed Frank's stories
   claude_ai.py          # photo description + story summary
   calls.py              # build the prompt, start the Vapi call
   weather.py
   texting.py            # Linq send + webhook signature check
 knowledge/profile.md    # Frank's fictional profile + seed stories (already written)
+apps_script/Code.gs     # the Sheet bridge; pasted into the Sheet's Apps Script editor
 templates/index.html
 static/style.css
 scripts/
@@ -199,8 +202,8 @@ README.md
 - **Linq:** sign up for the free sandbox and get an API token and a number. Subscribe `PUBLIC_BASE_URL/webhooks/linq` to `message.received`, and copy the signing secret. Text the Linq number once from the family phone so the chat exists. Confirm the plan lasts through judging week and allows enough contacts (the free Hobby plan allows 20).
 - **Anthropic Console:** create an API key.
 - **OpenWeather:** create a key. New keys can take up to 2 hours to activate.
-- **Google Cloud:** create a service account and its JSON key, and enable the Sheets and Drive APIs. Share the Sheet with the service account as Editor, and set "anyone with the link" to Viewer.
-- **Render:** create a Free web service from the GitHub repo. Build command `pip install -r requirements.txt`, start command `gunicorn app:app`, health check path `/health`. Add the environment variables (paste the whole service account JSON file into `GOOGLE_SERVICE_ACCOUNT_JSON`).
+- **Google Sheet:** create the Sheet and set "anyone with the link" to Viewer. Paste `apps_script/Code.gs` into Extensions > Apps Script, set its `SECRET`, and deploy it as a web app (Execute as: Me, Who has access: Anyone). Copy the `/exec` URL. After any later edit to the script, deploy a new version. No Google Cloud project is needed.
+- **Render:** create a Free web service from the GitHub repo. Build command `pip install -r requirements.txt`, start command `gunicorn app:app`, health check path `/health`. Add the environment variables.
 - **Uptime pinger** (e.g. UptimeRobot, free): check `/health` every 10 minutes.
 
 ## Build plan
@@ -233,7 +236,7 @@ Do one step at a time. Finish each step by passing its "done when" check, then c
 - The live URL and a link to the demo video
 - How judges try it. The demo code goes in the submission form, not the README.
 - The six superpowers and where to see each one
-- Setup: the accounts needed, the environment variables, deploying on Render, and creating the Sheet and service account
+- Setup: the accounts needed, the environment variables, deploying on Render, and creating the Sheet and its Apps Script bridge
 - Limits: texting runs on Linq's free plan, which caps the number of contacts. Calls are capped at 3 minutes.
 - This section, word for word (the builder wrote it):
 
@@ -257,3 +260,4 @@ Frank, his family and his stories are fictional. Never add real names, places or
 - Don't push to main during judging unless you're fixing a real bug, because every push redeploys.
 - Check the Vapi credit and Twilio balances, and Linq's contact count, daily. Keep auto-recharge off everywhere.
 - After judging, release the Twilio number so it stops billing monthly.
+- **Reminder: close the Google Cloud billing account** from the abandoned service-account attempt, and check the $30 comes back. The app doesn't use Google Cloud (the Apps Script bridge doesn't need it), so this can be done any time.

@@ -2,15 +2,17 @@
 
 The Sheet is Storyline's database (Render's free filesystem is wiped on every
 restart), and each write is also the "Actions" superpower.
+
+The app reaches the Sheet through a small Apps Script web app that lives
+inside the Sheet (apps_script/Code.gs). That means no Google Cloud project
+and no service account key: just a URL and a shared secret.
 """
 
-import json
 import logging
-import threading
 import time
 from datetime import datetime, timezone
 
-import gspread
+import requests
 
 from services import config
 
@@ -23,11 +25,9 @@ TABS = {
     "calls": ["timestamp", "phone_last4", "status", "duration_seconds", "ended_reason"],
 }
 
-TIMEOUT_SECONDS = 20
+TIMEOUT_SECONDS = 30
 CACHE_SECONDS = 60
 
-_lock = threading.Lock()
-_spreadsheet = None
 _cache: dict[str, tuple[float, list[dict]]] = {}
 
 
@@ -36,57 +36,59 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _open():
-    global _spreadsheet
-    with _lock:
-        if _spreadsheet is None:
-            info = json.loads(config.require("GOOGLE_SERVICE_ACCOUNT_JSON"))
-            client = gspread.service_account_from_dict(info)
-            client.set_timeout(TIMEOUT_SECONDS)
-            _spreadsheet = client.open_by_key(config.require("GOOGLE_SHEET_ID"))
-        return _spreadsheet
+def is_configured() -> bool:
+    return bool(config.get("SHEETS_WEBAPP_URL") and config.get("SHEETS_WEBAPP_SECRET"))
 
 
-def _worksheet(tab: str):
-    return _open().worksheet(tab)
+def _call(action: str, **payload) -> dict:
+    """POST one action to the Apps Script bridge and return its JSON reply.
+    Apps Script answers a POST with a redirect, which requests follows."""
+    body = {"secret": config.require("SHEETS_WEBAPP_SECRET"), "action": action, **payload}
+    response = requests.post(config.require("SHEETS_WEBAPP_URL"), json=body, timeout=TIMEOUT_SECONDS)
+    response.raise_for_status()
+    try:
+        data = response.json()
+    except ValueError:
+        snippet = response.text[:200].replace("\n", " ")
+        raise RuntimeError(
+            f"Sheet bridge didn't return JSON. Is SHEETS_WEBAPP_URL the /exec URL and "
+            f"deployed with access 'Anyone'? Got: {snippet}"
+        ) from None
+    if not data.get("ok"):
+        raise RuntimeError(f"Sheet bridge error on '{action}': {data.get('error')}")
+    return data
+
+
+def ping() -> None:
+    _call("ping")
 
 
 def ensure_tabs() -> None:
     """Create any missing tabs and make sure each one has its header row."""
-    spreadsheet = _open()
-    existing = {ws.title: ws for ws in spreadsheet.worksheets()}
-    for tab, headers in TABS.items():
-        ws = existing.get(tab)
-        if ws is None:
-            ws = spreadsheet.add_worksheet(title=tab, rows=1000, cols=len(headers))
-            log.info("Created tab %s", tab)
-        if ws.row_values(1) != headers:
-            ws.update([headers], "A1")
-            ws.freeze(rows=1)
-            log.info("Wrote headers on tab %s", tab)
+    _call("ensure_tabs", tabs=TABS)
 
 
 def append(tab: str, record: dict) -> None:
-    """Append one row. Values are stored as plain text (RAW), so text that
-    starts with '=' can never run as a formula."""
-    headers = TABS[tab]
-    row = [str(record.get(h, "")) for h in headers]
-    _worksheet(tab).append_row(row, value_input_option="RAW")
+    """Append one row. Values are stored as plain text, never as formulas."""
+    values = [str(record.get(h, "")) for h in TABS[tab]]
+    _call("append", tab=tab, values=values)
     _cache.pop(tab, None)
 
 
 def rows(tab: str, use_cache: bool = False) -> list[dict]:
-    """All data rows of a tab as dicts keyed by header. With use_cache, the
-    result may be up to CACHE_SECONDS old (for page loads)."""
+    """All data rows of a tab as dicts keyed by header (every value is text).
+    With use_cache, the result may be up to CACHE_SECONDS old (for page loads)."""
     if use_cache:
         hit = _cache.get(tab)
         if hit and time.time() - hit[0] < CACHE_SECONDS:
             return hit[1]
-    # numericise_ignore=["all"] keeps every value as text, so a phone_last4
-    # like "0412" doesn't turn into the number 412.
-    records = _worksheet(tab).get_all_records(
-        expected_headers=TABS[tab], numericise_ignore=["all"]
-    )
+    values = _call("rows", tab=tab)["values"]
+    headers = TABS[tab]
+    records = [
+        dict(zip(headers, row + [""] * (len(headers) - len(row))))
+        for row in values[1:]
+        if any(cell.strip() for cell in row)
+    ]
     _cache[tab] = (time.time(), records)
     return records
 
@@ -94,7 +96,7 @@ def rows(tab: str, use_cache: bool = False) -> list[dict]:
 def update_cell(tab: str, row_number: int, column: str, value) -> None:
     """Set one cell. row_number is the Sheet row (data starts at row 2)."""
     col = TABS[tab].index(column) + 1
-    _worksheet(tab).update_cell(row_number, col, str(value))
+    _call("update_cell", tab=tab, row=row_number, col=col, value=str(value))
     _cache.pop(tab, None)
 
 

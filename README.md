@@ -42,7 +42,7 @@ _Coming soon._ You'll enter your phone number and the demo code from our submiss
 
 ### Accounts you need
 
-Twilio (one voice number), Vapi, Linq, the Anthropic API, OpenWeather, Google Cloud (a service account for Sheets), and Render.
+Twilio (one voice number), Vapi, Linq, the Anthropic API, OpenWeather, a Google account for the Sheet, and Render. No Google Cloud project is needed.
 
 ### Local run
 
@@ -57,10 +57,19 @@ Open http://localhost:8000 (gunicorn) or http://localhost:5000 (`python app.py`)
 
 ### Google Sheet setup
 
-1. In Google Cloud, create a project, enable the **Google Sheets API** and the **Google Drive API**, then create a service account and download its JSON key.
-2. Create an empty Google Sheet. Share it with the service account's email (`client_email` in the key) as **Editor**, and set "Anyone with the link" to **Viewer**.
-3. Put the key file's contents in `GOOGLE_SERVICE_ACCOUNT_JSON` (on Render, paste the whole file; in a local `.env`, put it on one line), and the Sheet's id (the long string between `/d/` and `/edit` in its URL) in `GOOGLE_SHEET_ID`.
-4. That's it. Every time the app starts, it creates any missing `stories`, `photos` and `calls` tabs and adds Frank's seed stories if they aren't there yet. Render's logs show `Sheet ready` when it worked. To do the same by hand, run `.venv/bin/python scripts/seed_sheet.py` (add `--dry-run` to preview the seed stories without touching the Sheet).
+The app talks to the Sheet through a small Apps Script that lives inside the Sheet (`apps_script/Code.gs`), so there's no Google Cloud project or service account key.
+
+1. Create an empty Google Sheet. Click **Share** and set "Anyone with the link" to **Viewer**, so judges can see it.
+2. In the Sheet, open **Extensions > Apps Script**. Replace everything in `Code.gs` with this repo's `apps_script/Code.gs`.
+3. Change `SECRET` near the top to a long random string (30+ letters and numbers), and click Save.
+4. Click **Deploy > New deployment**. Next to "Select type", click the gear and choose **Web app**. Set **Execute as: Me** and **Who has access: Anyone**, then click **Deploy**.
+5. Google asks you to authorize. Choose your account. If it says "Google hasn't verified this app", click **Advanced**, then **Go to (your project) (unsafe)**, then **Allow**. It's your own script, so this is expected.
+6. Copy the **Web app URL** (it ends in `/exec`). Opening it in a browser should show `Storyline sheet bridge is running`.
+7. Set `SHEETS_WEBAPP_URL` to that URL, `SHEETS_WEBAPP_SECRET` to the same secret, and `GOOGLE_SHEET_ID` to the long string between `/d/` and `/edit` in the Sheet's URL.
+
+That's it. Every time the app starts, it creates any missing `stories`, `photos` and `calls` tabs and adds Frank's seed stories if they aren't there yet. Render's logs show `Sheet ready` when it worked. To do the same by hand, run `.venv/bin/python scripts/seed_sheet.py` (add `--dry-run` to preview the seed stories without touching the Sheet).
+
+If you change `Code.gs` later, the change only goes live after **Deploy > Manage deployments >** pencil icon **> Version: New version > Deploy**. The URL stays the same.
 
 ### Deploy on Render
 
