@@ -22,8 +22,13 @@ log = logging.getLogger(__name__)
 
 GITHUB_URL = "https://github.com/Volt32423/storyline"
 PHOTOS_SHOWN = 6
-PAGE_WAIT_SECONDS = 2.0
+PAGE_WAIT_SECONDS = 3.0
 SOURCES = ("stories", "photos", "calls")
+
+# How a source came back for this page load.
+OK = "ok"            # rows are here (fresh, or the last ones read)
+LOADING = "loading"  # nothing read yet, and the read is still running
+DOWN = "down"        # the Sheet isn't set up, or the read failed with nothing to fall back on
 
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="page-data")
 _jobs: dict[str, Future] = {}
@@ -40,38 +45,53 @@ def _start(key: str, fn) -> Future:
         return job
 
 
+def _read(tab: str) -> list[dict]:
+    """Read a tab, logging how long a slow read took, or why it failed, so
+    Render's logs show whether Apps Script is slow or not answering at all."""
+    started = time.monotonic()
+    try:
+        found = sheets.rows(tab)
+    except Exception as error:
+        log.error("Sheet read for %s failed after %.1f s: %s", tab, time.monotonic() - started, error)
+        raise
+    took = time.monotonic() - started
+    if took > PAGE_WAIT_SECONDS:
+        log.info("Sheet read for %s took %.1f s (%d rows); the page has it now", tab, took, len(found))
+    return found
+
+
 def warm() -> None:
-    """Start reading everything the page needs, without waiting. Called once
-    the Sheet is set up, so the first visitor after a deploy gets a full page."""
+    """Start reading everything the page needs, without waiting. Runs when
+    the app starts, so the first visitor after a deploy gets a full page."""
     if sheets.is_configured():
         for tab in SOURCES:
             if sheets.fresh(tab) is None:
-                _start(tab, lambda tab=tab: sheets.rows(tab))
+                _start(tab, lambda tab=tab: _read(tab))
     _start("weather", weather.current)
 
 
-def _rows(tab: str, deadline: float) -> tuple[list[dict], bool]:
-    """(rows, ok) for a tab, never waiting past the deadline. Fresh cached rows
-    come back at once. Otherwise a background read starts (or is joined), and
-    if it isn't back by the deadline, the last rows read are used instead."""
+def _rows(tab: str, deadline: float) -> tuple[list[dict], str]:
+    """(rows, OK / LOADING / DOWN) for a tab, never waiting past the deadline.
+    Fresh cached rows come back at once. Otherwise a background read starts
+    (or is joined), and if it isn't back by the deadline, the last rows read
+    are used instead."""
     if not sheets.is_configured():
-        return [], False
+        return [], DOWN
     hit = sheets.fresh(tab)
     if hit is not None:
-        return hit, True
-    job = _start(tab, lambda: sheets.rows(tab))
+        return hit, OK
+    job = _start(tab, lambda: _read(tab))
     try:
-        return job.result(timeout=max(0.0, deadline - time.monotonic())), True
+        return job.result(timeout=max(0.0, deadline - time.monotonic())), OK
     except FutureTimeout:
         stale = sheets.cached(tab)
-        log.warning("Sheet slow to answer for %s; page shows %s", tab,
-                    "older rows" if stale is not None else "no rows yet")
-        return stale or [], stale is not None
-    except Exception as error:
+        if stale is not None:
+            return stale, OK
+        log.warning("Sheet slow to answer for %s; page shows it as loading", tab)
+        return [], LOADING
+    except Exception:
         stale = sheets.cached(tab)
-        log.error("Page couldn't read %s from the Sheet: %s%s", tab, error,
-                  " (showing older rows)" if stale is not None else "")
-        return stale or [], stale is not None
+        return (stale, OK) if stale is not None else ([], DOWN)
 
 
 def _weather(deadline: float) -> dict | None:
@@ -165,7 +185,7 @@ def book_data() -> dict:
     """Everything templates/book.html needs: every story, oldest first, laid
     out like a keepsake. Concerns stay out; they're for the family to check,
     not for the book. Never raises."""
-    rows, ok = _rows("stories", time.monotonic() + PAGE_WAIT_SECONDS)
+    rows, state = _rows("stories", time.monotonic() + PAGE_WAIT_SECONDS)
     stories = calls.memory_stories(rows)
     months = []
     for s in stories:
@@ -191,7 +211,7 @@ def book_data() -> dict:
             "told": (f"Told on a call on {told_on}" if s.get("source") == "call" and told_on
                      else "One of the stories he told before Storyline"),
         })
-    return {"name": config.GRANDPA_NAME, "stories": entries, "ok": ok,
+    return {"name": config.GRANDPA_NAME, "stories": entries, "ok": state == OK, "loading": state == LOADING,
             "count": _count(len(entries), "story", "stories"), "collected": collected}
 
 
@@ -200,10 +220,13 @@ def page_data() -> dict:
     more than about PAGE_WAIT_SECONDS."""
     deadline = time.monotonic() + PAGE_WAIT_SECONDS
     warm()  # start every read at once, so they run side by side
-    all_stories, stories_ok = _rows("stories", deadline)
-    photo_rows, photos_ok = _rows("photos", deadline)
-    call_rows, calls_ok = _rows("calls", deadline)
+    all_stories, stories_state = _rows("stories", deadline)
+    photo_rows, photos_state = _rows("photos", deadline)
+    call_rows, calls_state = _rows("calls", deadline)
     today = _weather(deadline)
+    stories_ok, photos_ok, calls_ok = (state == OK for state in (stories_state, photos_state, calls_state))
+    loading = LOADING in (stories_state, photos_state, calls_state)
+    loading_line = "Loading from the family Sheet…"
 
     stories = calls.memory_stories(all_stories)
     plan = calls.choose_plan(stories, photo_rows, len(call_rows))
@@ -216,7 +239,9 @@ def page_data() -> dict:
     city = weather.city_name()
     name = config.GRANDPA_NAME
 
-    if last_call:
+    if calls_state == LOADING:
+        voice = loading_line
+    elif last_call:
         voice = f"Last call {friendly_time(last_call.get('timestamp', ''))}"
         duration = friendly_duration(last_call.get("duration_seconds", ""))
         voice += f", {duration} long." if duration else "."
@@ -231,7 +256,9 @@ def page_data() -> dict:
         texting_line = f"Text a photo to {linq_number} and it shows up below."
 
     saved = _count(len(stories), "saved story", "saved stories")
-    if plan["kind"] == "photo":
+    if stories_state == LOADING or photos_state == LOADING:
+        knowledge_line = loading_line
+    elif plan["kind"] == "photo":
         knowledge_line = f"Next call asks about the newest photo, with {saved} in mind."
     elif plan["kind"] == "story":
         knowledge_line = f"Next call retells “{plan['story'].get('title', '').strip()}” ({saved} in all)."
@@ -243,7 +270,9 @@ def page_data() -> dict:
     latest_saved = next((s for s in reversed(stories) if s.get("source") == "call"), None)
     counts = (f"{_count(len(stories), 'story', 'stories')}, {_count(len(photo_rows), 'photo')} "
               f"and {_count(len(call_rows), 'call')} saved so far.")
-    if not sheet_ok:
+    if loading:
+        actions_line = loading_line
+    elif not sheet_ok:
         actions_line = "The Sheet isn't answering right now. Refresh in a moment."
     elif latest_saved:
         actions_line = (f"Latest: Claude saved “{latest_saved.get('title', '').strip()}” "
@@ -262,7 +291,8 @@ def page_data() -> dict:
          "evidence": texting_line},
         {"name": "Vision", "ok": bool(last_photo),
          "what": "Claude looks at each photo and writes down what it sees, plus one gentle question.",
-         "evidence": (f"Latest: “{_shorten(last_photo.get('description', ''), 120)}”"
+         "evidence": (loading_line if photos_state == LOADING
+                      else f"Latest: “{_shorten(last_photo.get('description', ''), 120)}”"
                       if last_photo else "No photos yet. Text or upload one below.")},
         {"name": "Knowledge", "ok": stories_ok,
          "what": (f"Before every call, Storyline reads {name}'s life profile, a knowledge file, "
@@ -302,7 +332,10 @@ def page_data() -> dict:
         "name": name,
         "city": city,
         "opening_line": calls.first_message({"weather": today}),
-        "next": _plan_for_page(plan),
+        "next": ({"kind": "loading"} if LOADING in (stories_state, photos_state) else _plan_for_page(plan)),
+        "loading": loading,
+        "photos_loading": photos_state == LOADING,
+        "stories_loading": stories_state == LOADING,
         "powers": powers,
         "photos": photos,
         "photo_count": len(photo_rows),

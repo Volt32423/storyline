@@ -90,7 +90,9 @@ def _is_today(timestamp: str) -> bool:
 
 def check_limits(phone_e164: str) -> None:
     """Raise CallError if today's caps are reached."""
-    today = [row for row in sheets.rows("calls") if _is_today(row.get("timestamp", ""))]
+    # Cached rows are fine here: every call this app starts is added to the
+    # cache as it's written, so the count is current.
+    today = [row for row in sheets.rows("calls", use_cache=True) if _is_today(row.get("timestamp", ""))]
     if len(today) >= config.number("MAX_CALLS_PER_DAY", 15):
         raise CallError("limit_day")
     last4 = phone_e164[-4:]
@@ -137,7 +139,7 @@ def build_context() -> dict:
     loaded = {}
     for tab in ("stories", "photos", "calls"):
         try:
-            loaded[tab] = sheets.rows(tab)
+            loaded[tab] = sheets.rows(tab, use_cache=True)  # up to 60 s old, so a slow Sheet doesn't delay the call
         except Exception as error:
             log.error("Couldn't load %s for the call: %s", tab, error)
             loaded[tab] = []

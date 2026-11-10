@@ -29,6 +29,7 @@
     </header>
 
     {% if book.stories %}
+      <script>try { sessionStorage.removeItem("storyline-book-reloads"); } catch (e) {}</script>
       <nav class="contents" aria-labelledby="contents-heading">
         <h2 id="contents-heading">Contents</h2>
         <ol>
@@ -54,6 +55,20 @@
           </article>
         {% endfor %}
       </main>
+    {% elif book.loading %}
+      <p class="empty book-empty">Loading the story book from the family Sheet&hellip;</p>
+      <script>
+        // The Sheet was slow; try again in a few seconds (at most three times).
+        (function () {
+          var key = "storyline-book-reloads", tries = 0;
+          try { tries = Number(sessionStorage.getItem(key) || 0); } catch (e) {}
+          if (tries >= 3) return;
+          setTimeout(function () {
+            try { sessionStorage.setItem(key, String(tries + 1)); } catch (e) {}
+            location.reload();
+          }, 5000);
+        })();
+      </script>
     {% elif not book.ok %}
       <p class="empty book-empty">The story book can&rsquo;t be loaded right now. Try again in a minute.</p>
     {% else %}

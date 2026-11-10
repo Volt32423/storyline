@@ -152,11 +152,14 @@ One clean, mobile-friendly page that a judge who knows nothing about the project
 
 Cache Sheet reads for 60 seconds so page loads don't hit Google's rate limits.
 
-**The page must answer fast, always.** Render's deploy check loads the page and wants an HTTP answer. A page that hangs on a slow Apps Script makes Render report "No open HTTP ports detected" and restart the app every few minutes, and visitors get a 502 each time. This happened once (Nov 2026). So `page.py` never waits more than `PAGE_WAIT_SECONDS` (2 s):
+**The page must answer fast, always.** Render's deploy check loads the page and wants an HTTP answer. A page that hangs on a slow Apps Script makes Render report "No open HTTP ports detected" and restart the app every few minutes, and visitors get a 502 each time. This happened once (Nov 2026). So `page.py` never waits more than `PAGE_WAIT_SECONDS` (3 s):
 - Sheet and weather reads run in the background, one at a time per source.
 - If a read isn't back in time, the page shows the last rows read, and the read finishes for the next visitor.
+- With nothing read yet (just after a restart), the page says "Loading from the family Sheet…", not "No stories yet". It then reloads itself after 5 s, at most 3 times and never while a visitor is filling in a form.
 - Writes update the cached rows directly (`sheets.append` and `update_cell`), so a new photo or story shows at once.
-- `page.warm()` reads everything right after startup.
+- `page.warm()` starts reading as soon as the app boots, and again once setup succeeds.
+- Starting a call uses cached rows (`use_cache=True` in `check_limits` and `build_context`), so a slow Sheet doesn't hold up the call.
+- Slow reads log `Sheet read for X took N s`, and failed reads log `Sheet read for X failed after N s: …`. If reads keep taking 10 s or more, check the Apps Script Executions page.
 - Don't add anything to `GET /` or `GET /book` that waits on a network call.
 
 Built (Nov 2026): `services/page.py` gathers everything in parallel and never raises. If the Sheet is down, it shows the last rows it read, and otherwise says plainly what's missing. Rows show a ✓ only when there's real, current evidence; otherwise they show a hollow circle and a sentence. The call card shows the call's real first message (live weather included) and what the next call will bring up, linked to that story. Photos show as "What Claude saw" prints: the six newest, with their question and an "Asked on a call" or "Waiting for the next call" chip. The story book leaves out `test` stories and flags concerns as "Worth checking on". A small script disables the submit button and shows a busy label, so a double click can't start two calls.

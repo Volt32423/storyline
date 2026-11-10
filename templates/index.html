@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400..800;1,7..72,400..600&family=Public+Sans:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=css_version) }}">
 </head>
-<body>
+<body{% if page.loading %} data-loading="yes"{% endif %}>
   <main class="page">
     <div class="hero">
       <div class="sky" aria-hidden="true"><span class="sky-tint"></span><span class="sky-brick"></span></div>
@@ -52,6 +52,8 @@
         <p class="then">
           {%- if page.next.kind == "story" -%}
             Then it brings back a story {{ page.name }} told before: <a href="#{{ page.next.anchor }}">&ldquo;{{ page.next.text|curly }}&rdquo;</a>.
+          {%- elif page.next.kind == "loading" -%}
+            Then it brings back one of {{ page.name }}&rsquo;s stories.
           {%- elif page.next.kind == "photo" -%}
             Then it describes the newest photo the family sent and asks: &ldquo;{{ page.next.text|curly }}&rdquo;
           {%- else -%}
@@ -134,7 +136,11 @@
             {% endfor %}
           </ul>
         {% else %}
-          <p class="empty">No photos yet. Share one, and what Claude sees in it shows up here.</p>
+          {% if page.photos_loading %}
+            <p class="empty">Loading the photos from the family Sheet&hellip;</p>
+          {% else %}
+            <p class="empty">No photos yet. Share one, and what Claude sees in it shows up here.</p>
+          {% endif %}
         {% endif %}
       </div>
     </section>
@@ -167,7 +173,11 @@
           {% endfor %}
         </ul>
       {% else %}
-        <p class="empty">No stories yet. The first call adds one.</p>
+        {% if page.stories_loading %}
+          <p class="empty">Loading {{ page.name }}&rsquo;s stories from the family Sheet&hellip;</p>
+        {% else %}
+          <p class="empty">No stories yet. The first call adds one.</p>
+        {% endif %}
       {% endif %}
       </div>
     </section>
@@ -197,6 +207,26 @@
         button.disabled = true;
       });
     });
+    // The family Sheet was slow to answer, so parts of the page say "Loading".
+    // Reload once it has had a few seconds, unless the visitor has started on
+    // a form. At most three times in a row.
+    (function () {
+      var key = "storyline-reloads", tries = 0;
+      if (!document.body.dataset.loading) {
+        try { sessionStorage.removeItem(key); } catch (e) {}
+        return;
+      }
+      try { tries = Number(sessionStorage.getItem(key) || 0); } catch (e) {}
+      if (tries >= 3) return;
+      setTimeout(function () {
+        var busy = Array.prototype.some.call(document.querySelectorAll("input"), function (el) {
+          return el === document.activeElement || (el.type === "file" ? el.files.length > 0 : el.value !== "");
+        });
+        if (busy) return;
+        try { sessionStorage.setItem(key, String(tries + 1)); } catch (e) {}
+        location.reload();
+      }, 5000);
+    })();
     window.addEventListener("pageshow", function () {
       document.querySelectorAll("button[data-label]").forEach(function (button) {
         button.textContent = button.dataset.label;

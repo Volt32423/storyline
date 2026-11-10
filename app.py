@@ -71,6 +71,7 @@ def _set_up_sheet() -> None:
 
 
 threading.Thread(target=_set_up_sheet, name="sheet-setup", daemon=True).start()
+page.warm()  # start reading the page's data now, alongside the Sheet setup
 
 
 KEEP_AWAKE_MINUTES = 10  # Render's free plan sleeps after 15 minutes without visitors
