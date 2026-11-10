@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 GITHUB_URL = "https://github.com/Volt32423/storyline"
 PHOTOS_SHOWN = 6
-PAGE_WAIT_SECONDS = 3.0
+PAGE_WAIT_SECONDS = 4.0  # only ever waited on a cold start; a normal Apps Script read takes 3-4 s
 SOURCES = ("stories", "photos", "calls")
 
 # How a source came back for this page load.
@@ -72,32 +72,37 @@ def warm() -> None:
 
 def _rows(tab: str, deadline: float) -> tuple[list[dict], str]:
     """(rows, OK / LOADING / DOWN) for a tab, never waiting past the deadline.
-    Fresh cached rows come back at once. Otherwise a background read starts
-    (or is joined), and if it isn't back by the deadline, the last rows read
-    are used instead."""
+
+    Fresh cached rows come back at once. Older cached rows also come back at
+    once, while a background read refreshes them for the next visitor (Apps
+    Script often takes 3-4 s, and nobody should wait for that). Only when
+    nothing has been read yet, just after a restart, does the page wait for the
+    read, up to the deadline."""
     if not sheets.is_configured():
         return [], DOWN
     hit = sheets.fresh(tab)
     if hit is not None:
         return hit, OK
     job = _start(tab, lambda: _read(tab))
+    stale = sheets.cached(tab)
+    if stale is not None:
+        return stale, OK
     try:
         return job.result(timeout=max(0.0, deadline - time.monotonic())), OK
     except FutureTimeout:
-        stale = sheets.cached(tab)
-        if stale is not None:
-            return stale, OK
         log.warning("Sheet slow to answer for %s; page shows it as loading", tab)
         return [], LOADING
     except Exception:
-        stale = sheets.cached(tab)
-        return (stale, OK) if stale is not None else ([], DOWN)
+        return [], DOWN
 
 
 def _weather(deadline: float) -> dict | None:
     """Current weather, never waiting past the deadline (then the last reading,
     if there is one)."""
     job = _start("weather", weather.current)
+    last = weather.last()
+    if last is not None and not job.done():
+        return last  # a refresh is running; use the last reading rather than wait
     try:
         return job.result(timeout=max(0.0, deadline - time.monotonic()))
     except Exception:

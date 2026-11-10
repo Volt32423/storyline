@@ -152,9 +152,10 @@ One clean, mobile-friendly page that a judge who knows nothing about the project
 
 Cache Sheet reads for 60 seconds so page loads don't hit Google's rate limits.
 
-**The page must answer fast, always.** Render's deploy check loads the page and wants an HTTP answer. A page that hangs on a slow Apps Script makes Render report "No open HTTP ports detected" and restart the app every few minutes, and visitors get a 502 each time. This happened once (Nov 2026). So `page.py` never waits more than `PAGE_WAIT_SECONDS` (3 s):
+**The page must answer fast, always.** Render's deploy check loads the page and wants an HTTP answer. A page that hangs on a slow Apps Script makes Render report "No open HTTP ports detected" and restart the app every few minutes, and visitors get a 502 each time. This happened once (Nov 2026). So `page.py` never waits more than `PAGE_WAIT_SECONDS` (4 s), and usually doesn't wait at all:
 - Sheet and weather reads run in the background, one at a time per source.
-- If a read isn't back in time, the page shows the last rows read, and the read finishes for the next visitor.
+- If the cached rows are older than 60 s, the page shows them right away and refreshes them in the background for the next visitor. Apps Script reads normally take 3–4 s, and nobody should wait for that.
+- The page waits for a read, up to 4 s, only when nothing has been read yet (just after a restart).
 - With nothing read yet (just after a restart), the page says "Loading from the family Sheet…", not "No stories yet". It then reloads itself after 5 s, at most 3 times and never while a visitor is filling in a form.
 - Writes update the cached rows directly (`sheets.append` and `update_cell`), so a new photo or story shows at once.
 - `page.warm()` starts reading as soon as the app boots, and again once setup succeeds.
