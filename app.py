@@ -58,7 +58,6 @@ def _set_up_sheet() -> None:
                     fcntl.flock(lock, fcntl.LOCK_EX)
                 added = knowledge.seed_sheet()
             log.info("Sheet ready (%d seed stories added)", added)
-            page.warm()  # read the page's data now, so the first visitor gets a full page
             return
         except Exception as error:
             log.error(
@@ -68,10 +67,6 @@ def _set_up_sheet() -> None:
             )
             time.sleep(SETUP_RETRY_SECONDS)
     log.error("Sheet setup gave up after %d tries. Fix the problem above, then redeploy.", SETUP_TRIES)
-
-
-threading.Thread(target=_set_up_sheet, name="sheet-setup", daemon=True).start()
-page.warm()  # start reading the page's data now, alongside the Sheet setup
 
 
 KEEP_AWAKE_MINUTES = 10  # Render's free plan sleeps after 15 minutes without visitors
@@ -106,7 +101,34 @@ def _keep_awake() -> None:
             log.warning("Keep-awake visit failed (%d in a row): %s", failures, error)
 
 
-threading.Thread(target=_keep_awake, name="keep-awake", daemon=True).start()
+_background_started = False
+_background_lock = threading.Lock()
+
+
+def start_background() -> None:
+    """Start the app's background work: Sheet setup, keep-awake, and reading
+    the page's data. Runs once, in the process that serves pages: gunicorn's
+    post_worker_init hook (gunicorn.conf.py), `python app.py`, or else the
+    first request.
+
+    Never at import time. Render imports the app once in gunicorn's main
+    process and then forks the worker from it. A thread caught mid-request at
+    that moment can leave the worker stuck on a lock nobody will release, and
+    anything it reads lands in the wrong process (the page said "Loading"
+    forever)."""
+    global _background_started
+    with _background_lock:
+        if _background_started:
+            return
+        _background_started = True
+    threading.Thread(target=_set_up_sheet, name="sheet-setup", daemon=True).start()
+    threading.Thread(target=_keep_awake, name="keep-awake", daemon=True).start()
+    page.warm()
+
+
+@app.before_request
+def _background_on_first_request() -> None:
+    start_background()  # a no-op after the first time
 
 
 MESSAGES = {

@@ -62,7 +62,7 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Linq (se
 - `photos`: timestamp, source (text or upload), description, question, asked (TRUE/FALSE)
 - `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason, call_id (Vapi's call id, so the webhook can find the row), topic (what the call was about, e.g. `Asked about a photo: Two young men...` or `Retold "Rowboats at Pine Lake"`). `ensure_tabs` adds a new column's header on the next startup without redeploying the Apps Script.
 
-On every startup, `app.py` runs `knowledge.seed_sheet()` in a background thread: it creates any missing tabs and loads the stories under "Stories Frank has already told" in `knowledge/profile.md` into `stories`, with source = seed, skipping titles already there. A file lock stops two gunicorn workers from seeding at once. `scripts/seed_sheet.py` does the same by hand.
+On every startup, `app.start_background()` runs `knowledge.seed_sheet()` in a background thread: it creates any missing tabs and loads the stories under "Stories Frank has already told" in `knowledge/profile.md` into `stories`, with source = seed, skipping titles already there. A file lock stops two gunicorn workers from seeding at once. `scripts/seed_sheet.py` does the same by hand.
 
 Only ever store the **last 4 digits** of a phone number. The Sheet is shared view-only with anyone who has the link, so judges can see it.
 
@@ -158,7 +158,7 @@ Cache Sheet reads for 60 seconds so page loads don't hit Google's rate limits.
 - The page waits for a read, up to 4 s, only when nothing has been read yet (just after a restart).
 - With nothing read yet (just after a restart), the page says "Loading from the family Sheet…", not "No stories yet". It then reloads itself after 5 s, at most 3 times and never while a visitor is filling in a form.
 - Writes update the cached rows directly (`sheets.append` and `update_cell`), so a new photo or story shows at once.
-- `page.warm()` starts reading as soon as the app boots, and again once setup succeeds.
+- `page.warm()` starts reading as soon as the worker boots (from `start_background()`).
 - Starting a call uses cached rows (`use_cache=True` in `check_limits` and `build_context`), so a slow Sheet doesn't hold up the call.
 - Slow reads log `Sheet read for X took N s`, and failed reads log `Sheet read for X failed after N s: …`. If reads keep taking 10 s or more, check the Apps Script Executions page.
 - Don't add anything to `GET /` or `GET /book` that waits on a network call.
@@ -175,6 +175,12 @@ Built (Nov 2026): `services/page.py` gathers everything in parallel and never ra
 - **Type:** Literata for Frank's world (stories, headings, spoken lines) and Public Sans for the machinery (forms, evidence, times). Both come from Google Fonts, with Georgia and system-ui fallbacks.
 - **Source of truth:** the design tokens live at the top of `static/style.css`, and the design system's `tokens.json` and `bundle.css` are generated from that file. Change the CSS first, then regenerate the system.
 - **Caching:** the stylesheet link carries a content hash (`?v=`), so a deploy never pairs the new page with an old stylesheet.
+
+**Nothing starts at import time.** Render imports the app once in gunicorn's main process, then forks the worker that serves pages. Your logs show this: the app's first log line comes before `Starting gunicorn`. Threads don't survive a fork, and a thread caught mid-request at that moment can leave the worker stuck on a lock nobody releases. Anything a main-process thread reads also lands in the wrong process. In Nov 2026 this made the page say "Loading" forever while the reads succeeded.
+- Background work (Sheet setup, keep-awake, `page.warm()`) starts in `app.start_background()`. It's called from gunicorn's `post_worker_init` hook in `gunicorn.conf.py`, or on the first request as a fallback, and runs once.
+- `page.py` also gives the worker a fresh thread pool after a fork (`os.register_at_fork`).
+- Tests call `storyline_app.start_background()` themselves.
+- To reproduce Render locally: `gunicorn app:app --preload`.
 
 ## Environment variables
 

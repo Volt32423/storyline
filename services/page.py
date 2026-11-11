@@ -9,6 +9,7 @@ page, and a page that hangs on a slow Google Apps Script gets the app
 restarted over and over (a 502 for visitors each time)."""
 
 import logging
+import os
 import re
 import threading
 import time
@@ -33,6 +34,20 @@ DOWN = "down"        # the Sheet isn't set up, or the read failed with nothing t
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="page-data")
 _jobs: dict[str, Future] = {}
 _jobs_lock = threading.Lock()
+
+
+def _fresh_after_fork() -> None:
+    """Render imports the app once in gunicorn's main process, then forks the
+    worker that serves pages. Threads don't survive a fork, so the worker's
+    copy of the pool, its jobs and its lock would never finish anything (the
+    page said "Loading" forever). Give the worker its own."""
+    global _pool, _jobs, _jobs_lock
+    _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="page-data")
+    _jobs = {}
+    _jobs_lock = threading.Lock()
+
+
+os.register_at_fork(after_in_child=_fresh_after_fork)
 
 
 def _start(key: str, fn) -> Future:
