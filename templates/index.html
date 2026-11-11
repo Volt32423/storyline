@@ -94,8 +94,10 @@
         {% endif %}
 
         <div class="share">
-          {% if page.linq_number %}
-            <p class="text-us">Text an old photo to <a href="{{ page.linq_sms }}"><strong>{{ page.linq_number }}</strong></a>, or upload one here.</p>
+          {% if page.text_number %}
+            <p class="text-us">Text an old photo to <a href="{{ page.text_sms }}"><strong>{{ page.text_number }}</strong></a>, or upload one here.</p>
+          {% elif page.texting_on %}
+            <p class="text-us">Family members text old photos to Storyline. Only their phones are set up to text it, so upload one here to try it yourself. It goes through the same steps.</p>
           {% else %}
             <p class="text-us">Upload an old photo here.</p>
           {% endif %}
@@ -190,7 +192,7 @@
       </p>
       <p>Grandpa {{ page.name }}, his family and his stories are made up for this demo.</p>
       <p>
-        About texting: people who text Storyline&rsquo;s number{% if page.linq_number %} ({{ page.linq_number }}){% endif %}
+        About texting: people who text Storyline&rsquo;s number{% if page.text_number %} ({{ page.text_number }}){% endif %}
         agree to get replies and story updates from Storyline. Reply STOP at any time to stop messages.
       </p>
     </footer>

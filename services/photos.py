@@ -1,15 +1,25 @@
-"""Old family photos: from a Linq text or the upload form, to a description and
-question in the Sheet that the next call asks about."""
+"""Old family photos: from a text (Sendblue or Linq) or the upload form, to a
+description and question in the Sheet that the next call asks about."""
 
 import logging
 import threading
+import time
 from collections import OrderedDict
 
-from services import claude_ai, config, sheets, texting
+from services import claude_ai, config, linq, sendblue, sheets
 
 log = logging.getLogger(__name__)
 
-STOP_WORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}  # never answered
+# Never answered. The texting service handles the opt-out itself.
+STOP_WORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPT OUT", "OPTOUT", "REVOKE"}
+
+# Sendblue may deliver a photo and its caption as two separate messages. Wait a
+# moment before sending the "text me a photo" tip, and skip it if a photo came.
+HINT_DELAY_SECONDS = 8
+PHOTO_GRACE_SECONDS = 120
+HINT_EVERY_SECONDS = 3600
+_last_photo: dict[str, float] = {}
+_last_hint: dict[str, float] = {}
 
 _seen_events: "OrderedDict[str, None]" = OrderedDict()
 _seen_lock = threading.Lock()
@@ -37,7 +47,7 @@ def save_photo(raw: bytes, source: str) -> dict | None:
 
 
 def first_time(event_id: str) -> bool:
-    """True the first time an event id is seen (Linq may deliver twice)."""
+    """True the first time an event id is seen (Linq and Sendblue may deliver twice)."""
     if not event_id:
         return True
     with _seen_lock:
@@ -63,29 +73,28 @@ def _message_fields(event: dict) -> tuple[str, list, str, bool]:
             bool(data.get("is_from_me")))
 
 
-def handle_linq_event(event: dict) -> int:
-    """Process one Linq webhook event. Returns how many photos were saved."""
-    if event.get("event_type") != "message.received":
-        return 0
-    chat_id, parts, sender, from_us = _message_fields(event)
-    if from_us:
-        return 0
-    name = config.GRANDPA_NAME
-    words = " ".join(str(p.get("value", "")) for p in parts if p.get("type") == "text").strip()
-    if words.upper().strip(".! ") in STOP_WORDS:
-        log.info("Opt-out text from ...%s: not replying", sender[-4:])
-        return 0
-    media = [p for p in parts if p.get("type") == "media" and p.get("url")]
-    if not media:
-        log.info("Text received from ...%s with no photo", sender[-4:])
-        texting.reply_in_chat(chat_id, f"Hi! Text an old family photo to this number, and Storyline "
-                                       f"will ask Grandpa {name} about it on his next call.")
-        return 0
+def _is_opt_out(words: str) -> bool:
+    return words.upper().strip(".! ") in STOP_WORDS
 
+
+def _hint() -> str:
+    return (f"Hi! Text an old family photo to this number, and Storyline "
+            f"will ask Grandpa {config.GRANDPA_NAME} about it on his next call.")
+
+
+def _got_it() -> str:
+    return f"Got it! Storyline will ask Grandpa {config.GRANDPA_NAME} about this photo on the next call."
+
+
+SORRY = "Sorry, I couldn't use that photo. Could you try sending a different one?"
+
+
+def _save_texted(urls: list[str], download) -> int:
+    """Download and save each texted photo. Returns how many were saved."""
     saved = 0
-    for part in media:
+    for url in urls:
         try:
-            raw = texting.download(part["url"])
+            raw = download(url)
         except Exception as error:
             log.error("Couldn't download a texted photo: %s", error)
             continue
@@ -94,8 +103,64 @@ def handle_linq_event(event: dict) -> int:
                 saved += 1
         except Exception as error:
             log.error("Couldn't save a texted photo: %s", error)
-    if saved:
-        texting.reply_in_chat(chat_id, f"Got it! Storyline will ask Grandpa {name} about this photo on the next call.")
-    else:
-        texting.reply_in_chat(chat_id, "Sorry, I couldn't use that photo. Could you try sending a different one?")
+    return saved
+
+
+def handle_linq_event(event: dict) -> int:
+    """Process one Linq webhook event. Returns how many photos were saved."""
+    if event.get("event_type") != "message.received":
+        return 0
+    chat_id, parts, sender, from_us = _message_fields(event)
+    if from_us:
+        return 0
+    words = " ".join(str(p.get("value", "")) for p in parts if p.get("type") == "text").strip()
+    if _is_opt_out(words):
+        log.info("Opt-out text from ...%s: not replying", sender[-4:])
+        return 0
+    media = [p["url"] for p in parts if p.get("type") == "media" and p.get("url")]
+    if not media:
+        log.info("Text received from ...%s with no photo", sender[-4:])
+        linq.reply_in_chat(chat_id, _hint())
+        return 0
+    saved = _save_texted(media, linq.download)
+    linq.reply_in_chat(chat_id, _got_it() if saved else SORRY)
+    return saved
+
+
+def handle_sendblue_message(message: dict) -> int:
+    """Process one incoming Sendblue message (the flat JSON its receive
+    webhook posts). Returns how many photos were saved."""
+    if message.get("is_outbound"):
+        return 0
+    sender = str(message.get("number") or message.get("from_number") or "")
+    if message.get("group_id"):
+        log.info("Group text from ...%s ignored: Storyline only works in one-to-one texts", sender[-4:])
+        return 0
+    words = str(message.get("content") or "").strip()
+    if _is_opt_out(words):
+        log.info("Opt-out text from ...%s: not replying", sender[-4:])
+        return 0
+
+    def reply(text: str) -> None:
+        if message.get("opted_out") or not sender.startswith("+"):
+            return
+        sendblue.send(sender, text, from_number=str(message.get("sendblue_number") or ""))
+
+    url = str(message.get("media_url") or "").strip()
+    if not url:
+        if not words:
+            log.info("Text from ...%s had no words and no media_url (fields: %s)",
+                     sender[-4:], ", ".join(sorted(message)))
+            return 0
+        log.info("Text received from ...%s with no photo", sender[-4:])
+        time.sleep(HINT_DELAY_SECONDS)
+        now = time.monotonic()
+        if (now - _last_photo.get(sender, -1e9) > PHOTO_GRACE_SECONDS
+                and now - _last_hint.get(sender, -1e9) > HINT_EVERY_SECONDS):
+            _last_hint[sender] = now
+            reply(_hint())
+        return 0
+    _last_photo[sender] = time.monotonic()
+    saved = _save_texted([url], sendblue.download)
+    reply(_got_it() if saved else SORRY)
     return saved

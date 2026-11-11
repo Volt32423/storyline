@@ -12,7 +12,7 @@ from pathlib import Path
 import requests
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
-from services import calls, claude_ai, config, knowledge, page, photos, sheets, texting
+from services import calls, claude_ai, config, knowledge, linq, page, photos, sendblue, sheets
 
 try:
     import fcntl  # Linux/macOS only; Render runs Linux
@@ -101,13 +101,38 @@ def _keep_awake() -> None:
             log.warning("Keep-awake visit failed (%d in a row): %s", failures, error)
 
 
+SENDBLUE_SETUP_TRIES = 3
+SENDBLUE_OUTCOMES = {"already": "already set up", "added": "added",
+                     "replaced": "replaced (an older Storyline webhook was removed)"}
+
+
+def _set_up_sendblue() -> None:
+    """On startup, make sure Sendblue posts incoming texts to /webhooks/sendblue
+    with our secret, so there's no webhook to paste by hand. Does nothing when
+    Sendblue isn't set up, or when the webhook is already there."""
+    if not (sendblue.is_configured() and sendblue.webhook_url()):
+        return
+    for attempt in range(1, SENDBLUE_SETUP_TRIES + 1):
+        try:
+            outcome = sendblue.set_up_webhook()
+            log.info("Sendblue webhook %s", SENDBLUE_OUTCOMES[outcome])
+            return
+        except Exception as error:
+            log.error("Sendblue webhook setup failed (try %d of %d): %s",
+                      attempt, SENDBLUE_SETUP_TRIES, error)
+            if attempt < SENDBLUE_SETUP_TRIES:
+                time.sleep(SETUP_RETRY_SECONDS)
+    log.error("Sendblue webhook setup gave up. Open /setup/sendblue?code=DEMO_CODE to try again, "
+              "or add the webhook by hand (see the README).")
+
+
 _background_started = False
 _background_lock = threading.Lock()
 
 
 def start_background() -> None:
-    """Start the app's background work: Sheet setup, keep-awake, and reading
-    the page's data. Runs once, in the process that serves pages: gunicorn's
+    """Start the app's background work: Sheet setup, the Sendblue webhook,
+    keep-awake, and reading the page's data. Runs once, in the process that serves pages: gunicorn's
     post_worker_init hook (gunicorn.conf.py), `python app.py`, or else the
     first request.
 
@@ -122,6 +147,7 @@ def start_background() -> None:
             return
         _background_started = True
     threading.Thread(target=_set_up_sheet, name="sheet-setup", daemon=True).start()
+    threading.Thread(target=_set_up_sendblue, name="sendblue-setup", daemon=True).start()
     threading.Thread(target=_keep_awake, name="keep-awake", daemon=True).start()
     page.warm()
 
@@ -257,7 +283,7 @@ def linq_webhook():
     """Linq posts here when someone texts Storyline's number. Check the
     signature, answer right away, and handle the photo in the background."""
     raw = request.get_data()
-    if not texting.verify_webhook(raw, request.headers):
+    if not linq.verify_webhook(raw, request.headers):
         log.warning("Rejected a Linq webhook with a missing or bad signature")
         return jsonify({"error": "invalid signature"}), 401
     try:
@@ -286,11 +312,11 @@ def setup_linq():
     if config.get("LINQ_WEBHOOK_SECRET"):
         return jsonify({"ok": False, "error": "Already set up: LINQ_WEBHOOK_SECRET is set."}), 409
     base_url = config.get("PUBLIC_BASE_URL").rstrip("/")
-    if not (texting.is_configured() and base_url):
+    if not (linq.is_configured() and base_url):
         return jsonify({"ok": False, "error": "Set LINQ_API_TOKEN and PUBLIC_BASE_URL in Render first."}), 400
     target = f"{base_url}/webhooks/linq?version={LINQ_WEBHOOK_VERSION}"
     try:
-        reply = texting.create_webhook_subscription(target)
+        reply = linq.create_webhook_subscription(target)
     except Exception as error:
         log.error("Linq webhook setup failed: %s", error)
         return jsonify({"ok": False, "error": str(error)}), 502
@@ -300,6 +326,65 @@ def setup_linq():
         "next_step": "Copy the signing secret below (it starts with whsec_) into LINQ_WEBHOOK_SECRET "
                      "in Render, then save and deploy. This page switches off once it's set.",
         "linq_reply": reply,
+    })
+
+
+@app.post("/webhooks/sendblue")
+def sendblue_webhook():
+    """Sendblue posts here when someone texts Storyline's number. Check the
+    secret, answer right away (Sendblue retries otherwise), and handle the
+    photo in the background."""
+    if not sendblue.verify_webhook(request.headers, request.args):
+        log.warning("Rejected a Sendblue webhook with a missing or wrong secret")
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        message = json.loads(request.get_data() or b"null")
+    except ValueError:
+        message = None
+    if not isinstance(message, dict):
+        return jsonify({"error": "bad json"}), 400
+    handle = str(message.get("message_handle") or "")
+    if not message.get("is_outbound") and photos.first_time(f"sendblue:{handle}" if handle else ""):
+        threading.Thread(target=_safe_sendblue_message, args=(message,), daemon=True).start()
+    return jsonify({"ok": True})
+
+
+def _safe_sendblue_message(message: dict) -> None:
+    try:
+        photos.handle_sendblue_message(message)
+    except Exception:
+        log.exception("Handling a Sendblue message failed")
+
+
+SENDBLUE_BY_HAND = ("To add it by hand instead: in Render, set SENDBLUE_WEBHOOK_SECRET to a long random "
+                    "string you make up, and deploy. Then in Sendblue's dashboard, under Developer > "
+                    "Webhooks, add a receive webhook with the URL PUBLIC_BASE_URL/webhooks/sendblue?key= "
+                    "followed by that same string.")
+
+
+@app.get("/setup/sendblue")
+def setup_sendblue():
+    """Point Sendblue's receive webhook at this app, with our secret. The app
+    also does this on every startup; this page is for trying again or checking.
+    Safe to open more than once, and it never shows the secret. Needs the demo code."""
+    if not _code_ok(request.args.get("code", "")):
+        abort(403)
+    if not (sendblue.is_configured() and sendblue.webhook_url()):
+        return jsonify({"ok": False, "error": "Set SENDBLUE_API_KEY, SENDBLUE_API_SECRET, SENDBLUE_PHONE_NUMBER, "
+                                              "PUBLIC_BASE_URL and SHEETS_WEBAPP_SECRET in Render first."}), 400
+    try:
+        outcome = sendblue.set_up_webhook()
+    except Exception as error:
+        log.error("Sendblue webhook setup failed: %s", error)
+        return jsonify({"ok": False, "error": str(error), "by_hand": SENDBLUE_BY_HAND}), 502
+    log.info("Sendblue webhook %s (from /setup/sendblue)", SENDBLUE_OUTCOMES[outcome])
+    return jsonify({
+        "ok": True,
+        "result": {"already": "Already set up: Sendblue sends incoming texts to this app.",
+                   "added": "Done: Sendblue now sends incoming texts to this app.",
+                   "replaced": "Done: replaced an older Storyline webhook, and Sendblue now sends "
+                               "incoming texts to this app."}[outcome],
+        "next_step": "From a phone that's a verified contact in Sendblue, text a photo to the Sendblue number.",
     })
 
 

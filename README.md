@@ -20,7 +20,7 @@ That's what Storyline does. Each call asks him about his life. When a memory is 
 1. Open the live site. Everything you need is on that one page, with no login.
 2. Under **Try it**, enter your US phone number and the demo code from our submission, then press **Call me as Grandpa Frank**. You'll play Frank, a made-up grandfather in his 80s. The page shows the exact line the call will open with and which memory it will bring up, plus a short cheat sheet about Frank.
 3. Talk for a minute or two, then hang up. Your story appears in **Frank's story book** within a minute or two (refresh the page).
-4. Optional: under **Photos Storyline has seen**, text an old photo to the number shown, or upload one. You'll see what Claude saw in it, and the next call asks Frank about it.
+4. Optional: under **Photos Storyline has seen**, upload an old photo. You'll see what Claude saw in it, and the next call asks Frank about it. (Family members text photos in instead. Our free texting plan only accepts their phones, so the upload form is how you try it. It runs the same steps.)
 5. Optional: open **the printable story book** (`/book`, linked from the story book section). It holds every story Frank has told, oldest first, laid out like a keepsake the family can print or save as a PDF.
 
 Calls are capped at 3 minutes, and at 3 per number per day.
@@ -32,7 +32,7 @@ The page's **What's working right now** panel shows live proof for each one.
 | Superpower | What it does here | Where to see it |
 |---|---|---|
 | Voice | Vapi calls you and has a warm, patient conversation | Your phone rings; the panel shows the last call |
-| Texting | Linq: text an old photo in, and the family gets each new story by text | Photos Storyline has seen; the family's phone |
+| Texting | Sendblue (iMessage): family members text an old photo in, and get each new story back by text | Photos marked "Texted in"; the family's phone in the demo video |
 | Vision | Claude describes each photo and writes a gentle question about it. Only the description is kept, never the photo | "What Claude saw" on each photo; the next call says it looked at the photo and asks about it |
 | Knowledge | Before every call, Storyline reads Frank's life profile (`knowledge/profile.md`, a knowledge file) plus every story he has told, so it can retell them and fill in what he forgets | The call retells a past story and reminds Frank of details; the panel names the next story |
 | Real-world data | OpenWeather: today's weather in Pittsburgh | The call's first line, shown on the page and said on the call |
@@ -43,7 +43,7 @@ The page's **What's working right now** panel shows live proof for each one.
 - [x] Step 0: skeleton (`/health`, placeholder page, Sheet setup script)
 - [x] Step 1: the outbound call (`POST /call`; preview the next call at `/call/preview?code=DEMO_CODE`)
 - [x] Step 2: saving the story after the call. Test without a phone call: open `/test/story?code=DEMO_CODE` (shows Claude's story, saves nothing) or `/test/story?code=DEMO_CODE&save=1` (also saves it to the Sheet as source "test", which calls never bring up). Or run `python scripts/replay_vapi.py` to test the webhook itself.
-- [x] Step 3: photos by text (Linq) and upload. Test without texting: the upload form on the page, or `python scripts/replay_linq.py URL --photo IMAGE_URL`. One-time Linq webhook setup: `/setup/linq?code=DEMO_CODE`.
+- [x] Step 3: photos by text and upload. Texting runs on Sendblue (switched from Linq, whose code stays as a fallback). Test without texting: the upload form on the page, or `python scripts/replay_sendblue.py URL --photo IMAGE_URL`.
 - [x] Step 4: the judge-ready page: the call card with the call's live opening line, the superpowers panel with live proof, the photos Claude has seen, and Frank's story book. Page data is cached for 60 seconds, and the page still loads if the Sheet or the weather is down.
 - [x] The printable story book (`/book`): a cover, contents, and every story oldest first. "Print or save as PDF" gives clean pages. Concern notes stay out of the keepsake.
 
@@ -51,7 +51,7 @@ The page's **What's working right now** panel shows live proof for each one.
 
 ### Accounts you need
 
-Twilio (one voice number), Vapi, Linq, the Anthropic API, OpenWeather, a Google account for the Sheet, and Render. No Google Cloud project is needed.
+Twilio (one voice number), Vapi, Sendblue (texting), the Anthropic API, OpenWeather, a Google account for the Sheet, and Render. No Google Cloud project is needed.
 
 ### Local run
 
@@ -80,6 +80,16 @@ That's it. Every time the app starts, it creates any missing `stories`, `photos`
 
 If you change `Code.gs` later, the change only goes live after **Deploy > Manage deployments >** pencil icon **> Version: New version > Deploy**. The URL stays the same.
 
+### Texting setup (Sendblue)
+
+1. Sign up for the free plan at [sendblue.com](https://www.sendblue.com) (no card needed).
+2. In the dashboard, copy the API key, the API secret and the Sendblue number. Set them as `SENDBLUE_API_KEY`, `SENDBLUE_API_SECRET` and `SENDBLUE_PHONE_NUMBER` (E.164, like `+14125550100`) on Render.
+3. Set `FAMILY_PHONE_NUMBER` to the phone that should get each new story. On the free plan it has to be a verified contact (add it in the dashboard) that has texted the Sendblue number once.
+4. Deploy. On startup the app tells Sendblue where to send incoming texts, with a secret only the app knows. Render's logs show `Sendblue webhook added` (or `already set up`). To try again by hand, open `/setup/sendblue?code=DEMO_CODE`.
+5. Text a photo to the Sendblue number from a verified phone. It shows up under **Photos Storyline has seen** within half a minute, and you get a reply.
+
+The free plan shares one number with other Sendblue users and allows up to 10 verified contacts. Only their texts reach the app.
+
 ### Deploy on Render
 
 1. Create a **Web Service** from this GitHub repo and choose the **Free** instance type.
@@ -90,6 +100,6 @@ Render's free plan puts an app to sleep after 15 minutes without visitors, and w
 
 ## Limits
 
-- Texting runs on Linq's free plan, which caps the number of contacts. If texting isn't available, the upload form does the same job for photos.
+- Texting runs on Sendblue's free plan: a shared number and up to 10 verified contacts, so only the family's phones can text photos in. Judges use the upload form, which does the same job.
 - Calls are capped at 3 minutes, 3 per number per day, and `MAX_CALLS_PER_DAY` in total.
 - Storyline only replies to people who text it first, and never answers STOP, UNSUBSCRIBE and similar opt-out words.

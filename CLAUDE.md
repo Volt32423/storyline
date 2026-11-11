@@ -19,7 +19,7 @@ This is a final project for an Applied AI class. **The deadline is Friday.** Jud
 | Superpower | How Storyline uses it | Where a judge sees it |
 |---|---|---|
 | Voice | Vapi places an outbound call, and the AI has a warm, patient conversation | Their phone rings |
-| Texting | Through Linq: family members text old photos to Storyline's number and the app reads them, and after each call the app texts the family the new story | The photo shows up on the site, and the family's phone gets the story |
+| Texting | Through Sendblue (iMessage; Linq's code stays as a fallback): family members text old photos to Storyline's number and the app reads them, and after each call the app texts the family the new story | The photo shows up on the site, and the family's phone gets the story |
 | Vision | Claude describes each photo and writes one gentle question to ask about it | The description on the site; the next call asks about it |
 | Knowledge | Before each call, the app loads `knowledge/profile.md` plus every saved story, so the AI can remind Frank of what he told it before | The AI retells a past story on the call |
 | Real-world data | OpenWeather current weather in Frank's city, mentioned when the call opens | The weather on the site and in the call |
@@ -28,7 +28,7 @@ This is a final project for an Applied AI class. **The deadline is Friday.** Jud
 ## Stack (don't add anything without asking)
 
 - Python 3.12, Flask, gunicorn
-- `anthropic` (Claude) and `requests` (for the Vapi, Linq and OpenWeather REST APIs, and the Sheet bridge)
+- `anthropic` (Claude) and `requests` (for the Vapi, Sendblue, Linq and OpenWeather REST APIs, and the Sheet bridge)
 - `pillow` and `pillow-heif` to convert and shrink photos before Claude sees them (added in step 3, because iPhone photos are often HEIC)
 - Google Sheets is reached through a small Apps Script web app inside the Sheet (`apps_script/Code.gs`), called with a shared secret. No Google Cloud project, no service account key, no `gspread`. The builder's Google project blocks key creation, so don't switch back.
 - Twilio is only the phone line behind Vapi. Our code never calls Twilio.
@@ -42,8 +42,8 @@ This is a final project for an Applied AI class. **The deadline is Friday.** Jud
 Browser ──► Flask app (Render) ──► Vapi create-call ──► imported Twilio number ──► phone rings
                  ▲   ▲                                         │
                  │   └──── end-of-call-report webhook ◄────────┘
-                 └──────── Linq message.received webhook (texts + photos)
-Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Linq (send texts)
+                 └──────── Sendblue receive webhook (texts + photos; or Linq's message.received)
+Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Sendblue or Linq (send texts)
 ```
 
 ### Routes
@@ -51,7 +51,9 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Linq (se
 - `GET /`: the page (see "The page" below)
 - `POST /call`: a form with a phone number and a demo code. Validates the code and the limits, builds the call context and starts the Vapi call.
 - `POST /upload`: a photo upload form. This is the backup path for Vision if incoming texts misbehave.
-- `POST /webhooks/linq`: inbound texts and photos from Linq (`message.received`)
+- `POST /webhooks/sendblue`: inbound texts and photos from Sendblue (its `receive` webhook)
+- `GET /setup/sendblue?code=DEMO_CODE`: points Sendblue's receive webhook at the app. The app also does this on every startup.
+- `POST /webhooks/linq`: inbound texts and photos from Linq (`message.received`), kept in case Linq comes back
 - `POST /webhooks/vapi`: Vapi server messages. Only `end-of-call-report` matters.
 - `GET /health`: returns 200 "ok". The app's own keep-awake thread (`_keep_awake` in `app.py`) visits `PUBLIC_BASE_URL/health` every 10 minutes (`KEEP_AWAKE_MINUTES`, 0 turns it off), so Render's free plan never sleeps. The request goes out and back in through Render, so it counts as a visitor. One always-on free service uses about 720 of the 750 free instance hours a month, so don't run a second always-on free service in the same Render workspace.
 - `GET /book`: the printable story book (`templates/book.html`, `page.book_data()`). It shows a gold cover with arches, a contents list, and every story oldest first, with no `test` stories and no concerns. Print CSS puts the cover and contents on their own pages and keeps each story on one page. It's read-only, so it can't affect calls. Linked from the story book section and the footer.
@@ -117,12 +119,14 @@ Built (Nov 2026): the webhook only accepts requests carrying `X-Storyline-Secret
    - places
    - concern: anything the family may want to check on, such as pain, a fall, feeling unwell or seeming upset. Empty if none. Don't make guesses about his memory or health.
 5. Append to `stories` and update the `calls` row.
-6. If `SMS_SENDING_ENABLED` is true, send a text through Linq to `FAMILY_PHONE_NUMBER`: "New story from Grandpa Frank: {title}: {summary}", plus a concern line if there is one.
+6. If `SMS_SENDING_ENABLED` is true, send a text through the texting service (Sendblue, or Linq) to `FAMILY_PHONE_NUMBER`: "New story from Grandpa Frank: {title}: {summary}", plus a concern line if there is one.
 7. Save one real payload, with phone numbers scrubbed, to `tests/fixtures/` for `scripts/replay_vapi.py`.
 
-### Incoming photo texts (`POST /webhooks/linq`)
+### Incoming photo texts (`POST /webhooks/sendblue`, or `POST /webhooks/linq`)
 
-Built (Nov 2026): `services/texting.py` (Linq API: base `https://api.linqapp.com/api/partner`, Bearer token; new message `POST /v3/messages` with `{"to": [...], "message": {"parts": [...]}}`; reply `POST /v3/chats/{chatId}/messages` with `{"message": {"parts": [...]}}`; Standard Webhooks signature check: `webhook-id`, `webhook-timestamp`, `webhook-signature` = `v1,base64(HMAC-SHA256(key, "{id}.{ts}.{raw body}"))`, key = base64-decoded secret after `whsec_`, 5-minute window). `services/photos.py` runs the shared pipeline for texted and uploaded photos. **Vision uses `claude-haiku-5-5`, not Sonnet**: Sonnet 5.5 rejects a forced tool while its default adaptive thinking is on, and Haiku 5.5 allows it. Photos go through Pillow + pillow-heif first (HEIC converted, EXIF rotation applied, long edge ≤ 1600 px, JPEG), because Claude doesn't accept HEIC. The tool also returns `suitable`; unsuitable images aren't saved. CDN downloads try without the token, then with it. `GET /setup/linq?code=DEMO_CODE` creates the webhook subscription (pinned to version 2026-02-03) and shows the signing secret; it switches itself off once `LINQ_WEBHOOK_SECRET` is set. `gunicorn.conf.py` runs 1 worker with 8 threads and a 120 s timeout, so uploads waiting on Claude don't block other requests.
+**Switched to Sendblue (Nov 2026)**, because Linq never answered the sandbox request. `services/texting.py` picks the service: Sendblue when `SENDBLUE_API_KEY`, `SENDBLUE_API_SECRET` and `SENDBLUE_PHONE_NUMBER` are set, otherwise Linq. Sendblue (`services/sendblue.py`, checked against docs.sendblue.com): base `https://api.sendblue.com`, headers `sb-api-key-id` and `sb-api-secret-key`; send `POST /api/send-message` with `{number, from_number, content}` (`from_number` is required on the free shared-number plan; a 200 can still carry `status: "ERROR"`, so both are checked). Incoming texts arrive as flat JSON on the `receive` webhook: `number`, `content`, `media_url` (one attachment per message), `message_handle` (used to skip duplicates), `is_outbound`, `group_id` (group texts are ignored), `opted_out`, `sendblue_number`. The webhook is checked with a secret derived from `SHEETS_WEBAPP_SECRET` (`SENDBLUE_WEBHOOK_SECRET` overrides it). Sendblue sends it back in the `sb-signing-secret` header, and it's also in the webhook URL's `?key=`, so either one passes. On startup the app lists the account's webhooks (`GET /api/account/webhooks`) and adds its own (`POST`, `{"webhooks": [{url, secret}], "type": "receive"}`), removing an older Storyline one with `DELETE` if the secret changed, and leaving other webhooks alone. Never answer a Sendblue webhook with 410, which deletes it. **Free plan:** one number shared with other free users, up to 10 verified contacts, and only verified contacts' texts reach the app. So the page doesn't ask judges to text the number; it points them at the upload form, which runs the same pipeline. A photo and its caption may arrive as two messages, so the "text me a photo" tip waits 8 s and is skipped if a photo came. `scripts/replay_sendblue.py` posts `tests/fixtures/sendblue_receive.json` (synthetic, documented shape).
+
+Linq (`services/linq.py`), built earlier (Nov 2026): Linq API: base `https://api.linqapp.com/api/partner`, Bearer token; new message `POST /v3/messages` with `{"to": [...], "message": {"parts": [...]}}`; reply `POST /v3/chats/{chatId}/messages` with `{"message": {"parts": [...]}}`; Standard Webhooks signature check: `webhook-id`, `webhook-timestamp`, `webhook-signature` = `v1,base64(HMAC-SHA256(key, "{id}.{ts}.{raw body}"))`, key = base64-decoded secret after `whsec_`, 5-minute window). `services/photos.py` runs the shared pipeline for texted and uploaded photos. **Vision uses `claude-haiku-5-5`, not Sonnet**: Sonnet 5.5 rejects a forced tool while its default adaptive thinking is on, and Haiku 5.5 allows it. Photos go through Pillow + pillow-heif first (HEIC converted, EXIF rotation applied, long edge ≤ 1600 px, JPEG), because Claude doesn't accept HEIC. The tool also returns `suitable`; unsuitable images aren't saved. CDN downloads try without the token, then with it. `GET /setup/linq?code=DEMO_CODE` creates the webhook subscription (pinned to version 2026-02-03) and shows the signing secret; it switches itself off once `LINQ_WEBHOOK_SECRET` is set. `gunicorn.conf.py` runs 1 worker with 8 threads and a 120 s timeout, so uploads waiting on Claude don't block other requests.
 
 1. Verify the webhook signature the way Linq's Webhooks guide describes.
 2. Return 200 right away and do the work in a background thread. Use `event_id` to skip duplicate deliveries.
@@ -132,7 +136,7 @@ Built (Nov 2026): `services/texting.py` (Linq API: base `https://api.linqapp.com
    - question: one warm, open question for Frank that offers details rather than testing him. Good: "This looks like a lake in summer. What did you love about days like that?" Bad: "Do you remember who this is?"
 5. Append to `photos`.
 6. If `SMS_SENDING_ENABLED` is true, reply in the same chat: "Got it! Storyline will ask Grandpa Frank about this photo on the next call."
-7. Never reply to an opt-out text (STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT). Storyline only ever replies to people who texted it first.
+7. Never reply to an opt-out text (STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, OPT OUT, REVOKE), or to anyone Sendblue marks `opted_out`. Storyline only ever replies to people who texted it first.
 
 Photos are text only: Storyline never stores or shows the image, just Claude's description and question. Everywhere a photo comes up, the page and the call make it clear that Claude looked at it ("What Claude saw").
 
@@ -190,11 +194,14 @@ Commit `.env.example` with every name and no secret values. Keep `.env` out of g
 ANTHROPIC_API_KEY=
 VAPI_API_KEY=
 VAPI_PHONE_NUMBER_ID=          # the imported Twilio number's id in Vapi
+SENDBLUE_API_KEY=              # texting: Sendblue OR Linq; Sendblue wins if both are set
+SENDBLUE_API_SECRET=
+SENDBLUE_PHONE_NUMBER=         # E.164; the Sendblue number (shared on the free plan)
 LINQ_API_TOKEN=
 LINQ_PHONE_NUMBER=             # E.164; the number people text photos to
 LINQ_WEBHOOK_SECRET=           # for verifying Linq webhook signatures
-FAMILY_PHONE_NUMBER=           # E.164; gets a text after each call. Text the Linq number from it once first.
-SMS_SENDING_ENABLED=true       # turn off if Linq sending misbehaves; reading photos still works
+FAMILY_PHONE_NUMBER=           # E.164; gets a text after each call. Must have texted Storyline's number once (and be a Sendblue verified contact).
+SMS_SENDING_ENABLED=true       # turn off if sending texts misbehaves; reading photos still works
 OPENWEATHER_API_KEY=
 GRANDPA_NAME=Frank             # fictional
 GRANDPA_CITY=Pittsburgh,US     # real city, used for the weather
@@ -218,7 +225,9 @@ services/
   claude_ai.py          # photo description + story summary
   calls.py              # build the prompt, start the Vapi call
   weather.py
-  texting.py            # Linq send + webhook signature check
+  texting.py            # which texting service is on, and the family's story text
+  sendblue.py           # Sendblue send, download, webhook secret and setup
+  linq.py               # Linq send + webhook signature check (the fallback)
   photos.py             # photo pipeline shared by texts and uploads
   page.py               # everything the home page shows (cached, never fails)
 knowledge/profile.md    # Frank's fictional profile + seed stories (already written)
@@ -228,6 +237,7 @@ static/style.css
 scripts/
   seed_sheet.py         # same setup as startup, by hand (--dry-run to preview)
   replay_vapi.py        # POST a saved end-of-call-report to a running app
+  replay_sendblue.py    # POST a sample Sendblue incoming text to a running app
   replay_linq.py        # POST a saved message.received payload to a running app
 tests/fixtures/         # saved payloads, phone numbers scrubbed
 requirements.txt
@@ -239,8 +249,9 @@ README.md
 ## Manual setup the builder does (Claude Code can't)
 
 - **Twilio (voice only):** upgrade the account ($20) and buy a local US number with Voice. A 412 (Pittsburgh) number matches Frank. No texting setup is needed here.
-- **Vapi:** create an account and import the Twilio number under Phone Numbers. SMS Enabled can stay off, since texting runs through Linq. Copy the number's id.
-- **Linq:** sign up for the free sandbox and get an API token and a number. Subscribe `PUBLIC_BASE_URL/webhooks/linq` to `message.received` (in Linq's dashboard, or by opening `/setup/linq?code=DEMO_CODE` once `LINQ_API_TOKEN` is set), and copy the signing secret into `LINQ_WEBHOOK_SECRET`. Text the Linq number once from the family phone so the chat exists. Confirm the plan lasts through judging week and allows enough contacts (the free Hobby plan allows 20).
+- **Vapi:** create an account and import the Twilio number under Phone Numbers. SMS Enabled can stay off, since texting runs through Sendblue. Copy the number's id.
+- **Sendblue:** sign up for the free plan at sendblue.com (no card). Copy the API key, API secret and the shared number into `SENDBLUE_API_KEY`, `SENDBLUE_API_SECRET` and `SENDBLUE_PHONE_NUMBER`. Add the family phone as a verified contact and text the number once from it. Render's logs then show `Sendblue webhook added` after the next deploy (or open `/setup/sendblue?code=DEMO_CODE`).
+- **Linq (fallback, not in use):** sign up for the free sandbox and get an API token and a number. Subscribe `PUBLIC_BASE_URL/webhooks/linq` to `message.received` (in Linq's dashboard, or by opening `/setup/linq?code=DEMO_CODE` once `LINQ_API_TOKEN` is set), and copy the signing secret into `LINQ_WEBHOOK_SECRET`. Text the Linq number once from the family phone so the chat exists. Confirm the plan lasts through judging week and allows enough contacts (the free Hobby plan allows 20).
 - **Anthropic Console:** create an API key.
 - **OpenWeather:** create a key. New keys can take up to 2 hours to activate.
 - **Google Sheet:** create the Sheet and set "anyone with the link" to Viewer. Paste `apps_script/Code.gs` into Extensions > Apps Script, set its `SECRET`, and deploy it as a web app (Execute as: Me, Who has access: Anyone). Copy the `/exec` URL. After any later edit to the script, deploy a new version. No Google Cloud project is needed.
@@ -267,7 +278,7 @@ Do one step at a time. Finish each step by passing its "done when" check, then c
 - Keep it boring. Write the simplest code that works: no database, no auth system, no frontend framework, no async framework.
 - Check the provider's current docs before using any third-party API field. If you're unsure, say so and ask.
 - **Never commit secrets.** `.env`, any `*.json` key file and unscrubbed fixtures stay out of git. Check `git status` before every commit.
-- Give every external call (Claude, Sheets, Vapi, Linq, OpenWeather) a timeout, and wrap it in try/except so a failure gets logged and the app keeps working. A failed weather lookup must never stop a call.
+- Give every external call (Claude, Sheets, Vapi, Sendblue, Linq, OpenWeather) a timeout, and wrap it in try/except so a failure gets logged and the app keeps working. A failed weather lookup must never stop a call.
 - Log one clear line per event (call started, story saved, photo described) so problems are easy to find in Render's logs.
 - Test with the replay scripts instead of real phone calls whenever you can, because every real call costs Vapi credits.
 - Update README.md as features land.
@@ -278,7 +289,7 @@ Do one step at a time. Finish each step by passing its "done when" check, then c
 - How judges try it. The demo code goes in the submission form, not the README.
 - The six superpowers and where to see each one
 - Setup: the accounts needed, the environment variables, deploying on Render, and creating the Sheet and its Apps Script bridge
-- Limits: texting runs on Linq's free plan, which caps the number of contacts. Calls are capped at 3 minutes.
+- Limits: texting runs on Sendblue's free plan: a shared number and up to 10 verified contacts, so only the family's phones can text photos in. Calls are capped at 3 minutes.
 - This section, word for word (the builder wrote it):
 
 ```markdown
@@ -299,6 +310,6 @@ Frank, his family and his stories are fictional. Never add real names, places or
 
 - Render's logs show `Keep-awake on: visiting .../health` after each deploy, and no run of `Keep-awake visit failed` lines.
 - Don't push to main during judging unless you're fixing a real bug, because every push redeploys.
-- Check the Vapi credit and Twilio balances, and Linq's contact count, daily. Keep auto-recharge off everywhere.
+- Check the Vapi credit and Twilio balances, and Sendblue's verified contacts, daily. Keep auto-recharge off everywhere.
 - After judging, release the Twilio number so it stops billing monthly.
 - **Reminder: close the Google Cloud billing account** from the abandoned service-account attempt, and check the $30 comes back. The app doesn't use Google Cloud (the Apps Script bridge doesn't need it), so this can be done any time.

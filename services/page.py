@@ -17,7 +17,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import datetime
 
-from services import calls, config, sheets, weather
+from services import calls, config, sheets, texting, weather
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +253,10 @@ def page_data() -> dict:
     last_call = call_rows[-1] if call_rows else None
     last_photo = photo_rows[-1] if photo_rows else None
     texted = [p for p in photo_rows if p.get("source") == "text"]
-    linq_number = pretty_phone(config.get("LINQ_PHONE_NUMBER"))
+    text_number = pretty_phone(texting.phone_number())
+    # Sendblue's free plan only passes on texts from the family's verified
+    # phones, so judges are pointed at the upload form instead of the number.
+    text_open = bool(text_number) and texting.open_to_everyone()
     sheet_url = sheets.sheet_url()
     sheet_ok = stories_ok and photos_ok and calls_ok
     city = weather.city_name()
@@ -268,12 +271,14 @@ def page_data() -> dict:
     else:
         voice = "No calls yet. Yours can be the first."
 
-    if not linq_number:
+    if not text_number:
         texting_line = "Texting isn't switched on yet. The upload form below works the same way."
     elif texted:
         texting_line = f"Last photo texted in {friendly_time(texted[-1].get('timestamp', ''))}."
+    elif text_open:
+        texting_line = f"Text a photo to {text_number} and it shows up below."
     else:
-        texting_line = f"Text a photo to {linq_number} and it shows up below."
+        texting_line = "Ready for the family's phones. A photo they text in shows up below."
 
     saved = _count(len(stories), "saved story", "saved stories")
     if stories_state == LOADING or photos_state == LOADING:
@@ -306,14 +311,14 @@ def page_data() -> dict:
         {"name": "Voice", "ok": bool(last_call),
          "what": f"Storyline phones you and has a slow, patient conversation as if you were {name}.",
          "evidence": voice},
-        {"name": "Texting", "ok": bool(linq_number),
+        {"name": "Texting", "ok": bool(text_number),
          "what": "Family members text in old photos, and get each new story back by text.",
          "evidence": texting_line},
         {"name": "Vision", "ok": bool(last_photo),
          "what": "Claude looks at each photo and writes down what it sees, plus one gentle question.",
          "evidence": (loading_line if photos_state == LOADING
                       else f"Latest: “{_shorten(last_photo.get('description', ''), 120)}”"
-                      if last_photo else "No photos yet. Text or upload one below.")},
+                      if last_photo else f"No photos yet. {'Text or upload' if text_open else 'Upload'} one below.")},
         {"name": "Knowledge", "ok": stories_ok,
          "what": (f"Before every call, Storyline reads {name}'s life profile, a knowledge file, "
                   f"plus every story he has told, so it can retell them and fill in what he forgets."),
@@ -360,8 +365,9 @@ def page_data() -> dict:
         "photos": photos,
         "photo_count": len(photo_rows),
         "stories": story_book,
-        "linq_number": linq_number,
-        "linq_sms": "sms:" + config.get("LINQ_PHONE_NUMBER") if linq_number else "",
+        "texting_on": bool(text_number),
+        "text_number": text_number if text_open else "",
+        "text_sms": "sms:" + texting.phone_number() if text_open else "",
         "sheet_url": sheet_url,
         "github_url": config.get("GITHUB_URL", GITHUB_URL),
     }
