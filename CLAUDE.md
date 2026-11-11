@@ -55,8 +55,10 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Sendblue
 - `GET /setup/sendblue?code=DEMO_CODE`: points Sendblue's receive webhook at the app. The app also does this on every startup.
 - `POST /webhooks/linq`: inbound texts and photos from Linq (`message.received`), kept in case Linq comes back
 - `POST /webhooks/vapi`: Vapi server messages. Only `end-of-call-report` matters.
+- `GET /live`: a 12-character fingerprint of the cached Sheet rows (`page.live_version()`). It never reads the Sheet; every save here updates the cache, so it changes the moment a photo, story or call is saved or a photo is asked about. The page polls it every 5 s (only while visible) and, when it changes, fetches `/` and swaps the elements marked `data-live-region` (the next-call line, the proof panel, the photos, the story book). No region holds a form, so nothing a visitor is typing is lost. New or changed items (`data-key`) get a brief gold outline.
+- `POST /text-number`: a demo-code form that shows the texting number. A right code here, or on the call or upload form, sets `code_ok` in Flask's signed session cookie (key derived from `SHEETS_WEBAPP_SECRET`), and the page then shows the number with a note that only family phones get through on the free plan. Without it, the number never appears in the HTML.
 - `GET /health`: returns 200 "ok". The app's own keep-awake thread (`_keep_awake` in `app.py`) visits `PUBLIC_BASE_URL/health` every 10 minutes (`KEEP_AWAKE_MINUTES`, 0 turns it off), so Render's free plan never sleeps. The request goes out and back in through Render, so it counts as a visitor. One always-on free service uses about 720 of the 750 free instance hours a month, so don't run a second always-on free service in the same Render workspace.
-- `GET /book`: the printable story book (`templates/book.html`, `page.book_data()`). It shows a gold cover with arches, a contents list, and every story oldest first, with no `test` stories and no concerns. Print CSS puts the cover and contents on their own pages and keeps each story on one page. It's read-only, so it can't affect calls. Linked from the story book section and the footer.
+- `GET /book`: the printable story book (`templates/book.html`, `page.book_data()`). It shows a gold cover with arches, a contents list, every story oldest first, then "Photos the family sent" (each photo's description, question, date and the story it led to), with no `test` stories and no concerns. A story told about a photo shows what Claude saw in it. Print CSS puts the cover, the contents and the photos on their own pages and keeps each story and photo on one page. It's read-only, so it can't affect calls. Linked from the story book section and the footer.
 
 ### Google Sheet tabs (the app creates them on startup)
 
@@ -141,6 +143,8 @@ Linq (`services/linq.py`), built earlier (Nov 2026): Linq API: base `https://api
 Photos are text only: Storyline never stores or shows the image, just Claude's description and question. Everywhere a photo comes up, the page and the call make it clear that Claude looked at it ("What Claude saw").
 
 `POST /upload` runs the same photo pipeline.
+
+**Which story a photo led to** (`page.photo_links`): a call that asked about a photo has the topic `Asked about a photo: <start of the description>` (`calls.PHOTO_TOPIC`), and the story saved after that call has the call's id. The page's print says "Frank's story about it" with a link, the story's line says "about a photo the family sent", and the book links both ways. No extra Sheet column is needed, and it works for calls made before this was built.
 
 ### The page (`GET /`)
 

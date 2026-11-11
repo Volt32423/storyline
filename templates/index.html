@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400..800;1,7..72,400..600&family=Public+Sans:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=css_version) }}">
 </head>
-<body{% if page.loading %} data-loading="yes"{% endif %}>
+<body data-live="{{ page.live_version }}"{% if page.loading %} data-loading="yes"{% endif %}>
   <main class="page">
     <div class="hero">
       <div class="sky" aria-hidden="true"><span class="sky-tint"></span><span class="sky-brick"></span></div>
@@ -49,7 +49,7 @@
       <div class="opening">
         <p class="opening-label">Your call will open like this:</p>
         <blockquote>&ldquo;{{ page.opening_line|curly }}&rdquo;</blockquote>
-        <p class="then">
+        <p class="then" data-live-region="next">
           {%- if page.next.kind == "story" -%}
             Then it brings back a story {{ page.name }} told before: <a href="#{{ page.next.anchor }}">&ldquo;{{ page.next.text|curly }}&rdquo;</a>.
           {%- elif page.next.kind == "loading" -%}
@@ -66,7 +66,7 @@
     <section class="proof" id="working" aria-labelledby="working-heading">
       <h2 id="working-heading">What&rsquo;s working right now</h2>
       <p class="lede">Storyline uses six AI superpowers. Each row shows the latest proof, live from the app.</p>
-      <ul class="powers">
+      <ul class="powers" data-live-region="powers">
         {% for power in page.powers %}
           <li class="power">
             <span class="mark {{ 'on' if power.ok else 'off' }}" aria-hidden="true">{{ "&#10003;"|safe if power.ok }}</span>
@@ -96,8 +96,21 @@
         <div class="share">
           {% if page.text_number %}
             <p class="text-us">Text an old photo to <a href="{{ page.text_sms }}"><strong>{{ page.text_number }}</strong></a>, or upload one here.</p>
+          {% elif page.texting_on and code_ok %}
+            <p class="text-us">Text an old photo to <a href="{{ page.family_sms }}"><strong>{{ page.family_number }}</strong></a>, or upload one here.</p>
+            <p class="note">Our free texting plan only passes on texts from phones set up as family contacts. If you don&rsquo;t get a reply within a minute, upload the photo here instead. It goes through the same steps.</p>
           {% elif page.texting_on %}
-            <p class="text-us">Family members text old photos to Storyline. Only their phones are set up to text it, so upload one here to try it yourself. It goes through the same steps.</p>
+            <p class="text-us">Family members text old photos to Storyline. You can also upload one here.</p>
+            <details class="reveal">
+              <summary>Show the number to text</summary>
+              <form method="post" action="{{ url_for('text_number') }}" class="form reveal-form">
+                <label>
+                  Demo code
+                  <input type="text" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+                </label>
+                <button class="button quiet" type="submit">Show the number</button>
+              </form>
+            </details>
           {% else %}
             <p class="text-us">Upload an old photo here.</p>
           {% endif %}
@@ -117,15 +130,18 @@
         </div>
       </div>
 
-      <div class="split-body">
+      <div class="split-body" data-live-region="photos">
         {% if page.photos %}
           <ul class="prints">
             {% for photo in page.photos %}
-              <li class="print">
+              <li class="print" data-key="{{ photo.key }}">
                 <p class="saw-label">What Claude saw</p>
                 <p class="saw">{{ photo.description|curly }}</p>
                 <p class="ask-label">Question for {{ page.name }}</p>
                 <p class="ask">&ldquo;{{ photo.question|curly }}&rdquo;</p>
+                {% if photo.story %}
+                  <p class="led-to">{{ page.name }}&rsquo;s story about it: <a href="#{{ photo.story.anchor }}">&ldquo;{{ photo.story.title|curly }}&rdquo;</a></p>
+                {% endif %}
                 <p class="meta">
                   <span>{{ photo.how }} {{ photo.when }}</span>
                   {% if photo.asked %}
@@ -154,11 +170,11 @@
         <p class="book-link"><a href="{{ url_for('book') }}">Open the printable story book</a></p>
       </div>
 
-      <div class="split-body">
+      <div class="split-body" data-live-region="stories">
       {% if page.stories %}
         <ul class="stories">
           {% for story in page.stories %}
-            <li class="story" id="{{ story.anchor }}">
+            <li class="story" id="{{ story.anchor }}" data-key="{{ story.anchor }}">
               <h3>{{ story.title|curly }}</h3>
               <p class="told">{{ story.told }}</p>
               <p class="summary">{{ story.summary|curly }}</p>
@@ -192,7 +208,7 @@
       </p>
       <p>Grandpa {{ page.name }}, his family and his stories are made up for this demo.</p>
       <p>
-        About texting: people who text Storyline&rsquo;s number{% if page.text_number %} ({{ page.text_number }}){% endif %}
+        About texting: people who text Storyline&rsquo;s number{% if page.text_number %} ({{ page.text_number }}){% elif page.family_number and code_ok %} ({{ page.family_number }}){% endif %}
         agree to get replies and story updates from Storyline. Reply STOP at any time to stop messages.
       </p>
     </footer>
@@ -228,6 +244,47 @@
         try { sessionStorage.setItem(key, String(tries + 1)); } catch (e) {}
         location.reload();
       }, 5000);
+    })();
+    // Keep the page current without a reload: every few seconds, ask whether
+    // anything new was saved (a photo, a story, a call, a photo asked about).
+    // If so, fetch the page and swap in the parts marked data-live-region.
+    // None of them hold a form, so nothing a visitor is typing is lost. New or
+    // changed items get a brief gold outline.
+    (function () {
+      var body = document.body, version = body.dataset.live, busy = false;
+      if (!version || !window.fetch || !window.DOMParser) return;
+      function keyed(root) {
+        var found = {};
+        root.querySelectorAll("[data-key]").forEach(function (el) { found[el.dataset.key] = el.textContent; });
+        return found;
+      }
+      function swap(html) {
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        document.querySelectorAll("[data-live-region]").forEach(function (old) {
+          var fresh = doc.querySelector('[data-live-region="' + old.dataset.liveRegion + '"]');
+          if (!fresh) return;
+          var before = keyed(old);
+          fresh.querySelectorAll("[data-key]").forEach(function (el) {
+            if (before[el.dataset.key] !== el.textContent) el.classList.add("just-in");
+          });
+          old.replaceWith(document.importNode(fresh, true));
+        });
+        if (doc.body.dataset.live) version = body.dataset.live = doc.body.dataset.live;
+      }
+      function check() {
+        if (busy || document.hidden || body.dataset.loading) return;
+        busy = true;
+        fetch("/live", { cache: "no-store" })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data.v || data.v === version) return;
+            return fetch("/", { cache: "no-store" }).then(function (r) { return r.text(); }).then(swap);
+          })
+          .catch(function () {})
+          .then(function () { busy = false; });
+      }
+      setInterval(check, 5000);
+      document.addEventListener("visibilitychange", check);
     })();
     window.addEventListener("pageshow", function () {
       document.querySelectorAll("button[data-label]").forEach(function (button) {

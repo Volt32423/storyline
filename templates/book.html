@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grandpa {{ book.name }}&rsquo;s Story Book</title>
-  <meta name="description" content="Every story Grandpa {{ book.name }} told Storyline, ready to print or save as a PDF.">
+  <meta name="description" content="Every story Grandpa {{ book.name }} told Storyline, and the photos the family sent, ready to print or save as a PDF.">
   <meta name="theme-color" content="#f2b01e">
   <meta name="color-scheme" content="light">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,12 +24,11 @@
         <span class="arches"><i></i><i></i><i></i></span>
       </div>
       <h1>Grandpa {{ book.name }}&rsquo;s Story Book</h1>
-      <p class="subtitle">The stories he told Storyline, saved for the family.</p>
+      <p class="subtitle">The stories he told Storyline{% if book.photos %}, and the photos that brought them back{% endif %}, saved for the family.</p>
       <p class="collected">{{ book.count|capitalize }}{% if book.collected %}, collected {{ book.collected }}{% endif %}</p>
     </header>
 
-    {% if book.stories %}
-      <script>try { sessionStorage.removeItem("storyline-book-reloads"); } catch (e) {}</script>
+    {% if book.stories or book.photos %}
       <nav class="contents" aria-labelledby="contents-heading">
         <h2 id="contents-heading">Contents</h2>
         <ol>
@@ -37,6 +36,9 @@
             <li><a href="#story-{{ story.number }}">{{ story.title|curly }}</a></li>
           {% endfor %}
         </ol>
+        {% if book.photos %}
+          <p class="contents-photos"><a href="#photos">Photos the family sent</a></p>
+        {% endif %}
       </nav>
 
       <main>
@@ -45,6 +47,12 @@
             <p class="number">Story {{ story.number }}</p>
             <h2>{{ story.title|curly }}</h2>
             <p class="told">{{ story.told }}</p>
+            {% if story.photo %}
+              <div class="from-photo">
+                <p class="label">It started with a photo the family sent. What Claude saw:</p>
+                <p class="saw">{{ story.photo|curly }}</p>
+              </div>
+            {% endif %}
             <p class="summary">{{ story.summary|curly }}</p>
             {% if story.people or story.places %}
               <dl class="facts">
@@ -54,9 +62,42 @@
             {% endif %}
           </article>
         {% endfor %}
+
+        {% if book.photos %}
+          <section class="book-photos" id="photos" aria-labelledby="photos-heading">
+            <h2 id="photos-heading">Photos the family sent</h2>
+            <p class="intro">Storyline doesn&rsquo;t keep the photos themselves. These are Claude&rsquo;s notes on each one, and the question it asked Grandpa {{ book.name }}.</p>
+            {% for photo in book.photos %}
+              <article class="book-photo">
+                <p class="number">Photo {{ photo.number }}</p>
+                <p class="label">What Claude saw</p>
+                <p class="saw">{{ photo.description|curly }}</p>
+                <p class="label">Question for Grandpa {{ book.name }}</p>
+                <p class="ask">&ldquo;{{ photo.question|curly }}&rdquo;</p>
+                <p class="sent">
+                  {{ photo.sent }}.
+                  {% if photo.story %}
+                    His story about it: <a href="#story-{{ photo.story.number }}">&ldquo;{{ photo.story.title|curly }}&rdquo;</a> (Story {{ photo.story.number }}).
+                  {% elif photo.asked %}
+                    Asked about on a call.
+                  {% else %}
+                    Not asked about on a call yet.
+                  {% endif %}
+                </p>
+              </article>
+            {% endfor %}
+          </section>
+        {% endif %}
       </main>
     {% elif book.loading %}
       <p class="empty book-empty">Loading the story book from the family Sheet&hellip;</p>
+    {% elif not book.ok %}
+      <p class="empty book-empty">The story book can&rsquo;t be loaded right now. Try again in a minute.</p>
+    {% else %}
+      <p class="empty book-empty">No stories yet. The first call adds one.</p>
+    {% endif %}
+
+    {% if book.loading or book.photos_loading %}
       <script>
         // The Sheet was slow; try again in a few seconds (at most three times).
         (function () {
@@ -69,10 +110,8 @@
           }, 5000);
         })();
       </script>
-    {% elif not book.ok %}
-      <p class="empty book-empty">The story book can&rsquo;t be loaded right now. Try again in a minute.</p>
     {% else %}
-      <p class="empty book-empty">No stories yet. The first call adds one.</p>
+      <script>try { sessionStorage.removeItem("storyline-book-reloads"); } catch (e) {}</script>
     {% endif %}
 
     <footer class="book-end">

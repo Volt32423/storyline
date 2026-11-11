@@ -19,9 +19,9 @@ That's what Storyline does. Each call asks him about his life. When a memory is 
 
 1. Open the live site. Everything you need is on that one page, with no login.
 2. Under **Try it**, enter your US phone number and the demo code from our submission, then press **Call me as Grandpa Frank**. You'll play Frank, a made-up grandfather in his 80s. The page shows the exact line the call will open with and which memory it will bring up, plus a short cheat sheet about Frank.
-3. Talk for a minute or two, then hang up. Your story appears in **Frank's story book** within a minute or two (refresh the page).
-4. Optional: under **Photos Storyline has seen**, upload an old photo. You'll see what Claude saw in it, and the next call asks Frank about it. (Family members text photos in instead. Our free texting plan only accepts their phones, so the upload form is how you try it. It runs the same steps.)
-5. Optional: open **the printable story book** (`/book`, linked from the story book section). It holds every story Frank has told, oldest first, laid out like a keepsake the family can print or save as a PDF.
+3. Talk for a minute or two, then hang up. Your story appears in **Frank's story book** within a minute or two. The page updates itself, so there's no need to refresh.
+4. Optional: under **Photos Storyline has seen**, upload an old photo. You'll see what Claude saw in it, and the next call asks Frank about it. Once the call has asked about it, the photo links to the story Frank told. Family members text photos in instead. **Show the number to text** reveals Storyline's number after you type the demo code, but our free texting plan only passes on texts from the family's phones, so the upload form is how you try it. It runs the same steps.
+5. Optional: open **the printable story book** (`/book`, linked from the story book section). It holds every story Frank has told, oldest first, then the photos the family sent with what Claude saw in each, laid out like a keepsake the family can print or save as a PDF. A story told about a photo shows that photo, and each photo names its story.
 
 Calls are capped at 3 minutes, and at 3 per number per day.
 
@@ -45,7 +45,8 @@ The page's **What's working right now** panel shows live proof for each one.
 - [x] Step 2: saving the story after the call. Test without a phone call: open `/test/story?code=DEMO_CODE` (shows Claude's story, saves nothing) or `/test/story?code=DEMO_CODE&save=1` (also saves it to the Sheet as source "test", which calls never bring up). Or run `python scripts/replay_vapi.py` to test the webhook itself.
 - [x] Step 3: photos by text and upload. Texting runs on Sendblue (switched from Linq, whose code stays as a fallback). Test without texting: the upload form on the page, or `python scripts/replay_sendblue.py URL --photo IMAGE_URL`.
 - [x] Step 4: the judge-ready page: the call card with the call's live opening line, the superpowers panel with live proof, the photos Claude has seen, and Frank's story book. Page data is cached for 60 seconds, and the page still loads if the Sheet or the weather is down.
-- [x] The printable story book (`/book`): a cover, contents, and every story oldest first. "Print or save as PDF" gives clean pages. Concern notes stay out of the keepsake.
+- [x] The printable story book (`/book`): a cover, contents, every story oldest first, then the photos the family sent ("What Claude saw", its question, and the story it led to). "Print or save as PDF" gives clean pages. Concern notes stay out of the keepsake.
+- [x] The page keeps itself current: every 5 seconds it asks `/live` whether anything was saved, and swaps in new photos, stories and proof without a reload (new or changed items get a brief gold outline).
 
 ## Running it yourself
 

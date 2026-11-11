@@ -4,13 +4,14 @@ import hashlib
 import hmac
 import json
 import logging
+import secrets
 import tempfile
 import threading
 import time
 from pathlib import Path
 
 import requests
-from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
+from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 
 from services import calls, claude_ai, config, knowledge, linq, page, photos, sendblue, sheets
 
@@ -30,6 +31,12 @@ for noisy in ("httpx", "httpx2", "httpcore"):  # one line per HTTP request is to
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # uploads bigger than 20 MB are refused
 app.jinja_env.filters["curly"] = page.curly  # it's -> it’s on the page
+# Signs the small cookie that remembers a visitor typed the right demo code, so
+# the page can show them the number to text. Derived from SHEETS_WEBAPP_SECRET,
+# so it survives restarts; without it, a random key works until the next one.
+app.secret_key = (hmac.new(config.get("SHEETS_WEBAPP_SECRET").encode(), b"storyline-session", hashlib.sha256).hexdigest()
+                  if config.get("SHEETS_WEBAPP_SECRET") else secrets.token_hex(32))
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # Changes whenever the stylesheet does, so browsers never pair a new page with an old one.
 CSS_VERSION = hashlib.sha256((config.ROOT / "static" / "style.css").read_bytes()).hexdigest()[:10]
@@ -159,7 +166,7 @@ def _background_on_first_request() -> None:
 
 MESSAGES = {
     "calling": ("ok", "Calling you now. Pick up and say hello! After you hang up, your story "
-                      "appears in the story book below within a minute or two. Refresh to see it."),
+                      "appears in the story book below within a minute or two."),
     "bad_code": ("error", "That demo code isn't right. It's in our project submission."),
     "bad_number": ("error", "Please enter a 10-digit US phone number."),
     "limit_number": ("error", "That number has had 3 calls today. Please try again tomorrow."),
@@ -187,9 +194,30 @@ def index():
         "index.html",
         page=page.page_data(),
         css_version=CSS_VERSION,
+        code_ok=bool(session.get("code_ok")),
         call_status=status if status and not msg.startswith("photo") else None,
         photo_status=status if status and msg.startswith("photo") else None,
     )
+
+
+@app.get("/live")
+def live():
+    """A fingerprint of what the page shows. The page asks every few seconds
+    and swaps in fresh photos, stories and proof when it changes. Never waits
+    on the Sheet."""
+    response = jsonify({"v": page.live_version()})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/text-number")
+def text_number():
+    """Show the number to text photos to, once a visitor types the demo code.
+    This browser remembers it in a signed cookie."""
+    if not _code_ok(request.form.get("code", "")):
+        return redirect(url_for("index", msg="photo_bad_code", _anchor="photos"))
+    session["code_ok"] = True
+    return redirect(url_for("index", _anchor="photos"))
 
 
 @app.get("/book")
@@ -205,6 +233,7 @@ def call():
         return redirect(url_for("index", msg="not_ready", _anchor="try"))
     if not _code_ok(request.form.get("code", "")):
         return redirect(url_for("index", msg="bad_code", _anchor="try"))
+    session["code_ok"] = True
     try:
         calls.place_call(request.form.get("phone", ""))
     except calls.CallError as error:
@@ -261,6 +290,7 @@ def upload():
     exactly like a texted one. Needs the demo code."""
     if not _code_ok(request.form.get("code", "")):
         return redirect(url_for("index", msg="photo_bad_code", _anchor="photos"))
+    session["code_ok"] = True
     file = request.files.get("photo")
     raw = file.read() if file else b""
     if not raw:

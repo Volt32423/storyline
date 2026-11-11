@@ -8,6 +8,7 @@ the next visitor. That matters beyond speed: Render's deploy checks load the
 page, and a page that hangs on a slow Google Apps Script gets the app
 restarted over and over (a 502 for visitors each time)."""
 
+import hashlib
 import logging
 import os
 import re
@@ -191,6 +192,50 @@ def _shorten(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
 
 
+def photo_id(photo: dict) -> str:
+    """A photo's id on the page and in the book: its row in the Sheet."""
+    return f"photo-{photo.get('_row') or photo.get('timestamp', '')}"
+
+
+def photo_links(photo_rows: list, stories: list, call_rows: list) -> tuple[dict, dict]:
+    """Which story each photo led to. A call that asked about a photo has a
+    topic like "Asked about a photo: <start of Claude's description>", and the
+    story saved after that call carries the call's id. Returns
+    (story by photo_id, photo by call id). Never raises."""
+    story_by_call = {str(s.get("call_id", "")): s for s in stories
+                     if s.get("source") == "call" and s.get("call_id")}
+    story_by_photo, photo_by_call = {}, {}
+    for row in call_rows:
+        topic = str(row.get("topic", ""))
+        call_id = str(row.get("call_id", ""))
+        if not topic.startswith(calls.PHOTO_TOPIC) or not call_id:
+            continue
+        start = topic[len(calls.PHOTO_TOPIC):].removesuffix("...").strip()
+        called_at = str(row.get("timestamp", ""))
+        # The photo it asked about was sent before the call and is marked
+        # asked; if the same picture was sent twice, take the newest such one.
+        matches = [p for p in photo_rows
+                   if start and str(p.get("description", "")).strip().startswith(start)
+                   and (not called_at or str(p.get("timestamp", "")) <= called_at)]
+        asked = [p for p in matches if str(p.get("asked", "")).upper() == "TRUE"]
+        photo = (asked or matches or [None])[-1]
+        if not photo:
+            continue
+        photo_by_call[call_id] = photo
+        if call_id in story_by_call:
+            story_by_photo[photo_id(photo)] = story_by_call[call_id]
+    return story_by_photo, photo_by_call
+
+
+def live_version() -> str:
+    """A short fingerprint of the Sheet rows the page is built from, taken from
+    the rows already in memory: it never waits and never reads the Sheet.
+    Every save here updates those rows at once, so it changes as soon as a
+    photo, story or call is saved, or a photo is asked about."""
+    seen = "|".join(repr(sheets.cached(tab)) for tab in SOURCES)
+    return hashlib.sha1(seen.encode()).hexdigest()[:12]
+
+
 def _plan_for_page(plan: dict) -> dict:
     """What the next call will bring up, in words a judge can play along with."""
     if plan["kind"] == "photo":
@@ -202,14 +247,22 @@ def _plan_for_page(plan: dict) -> dict:
 
 
 def book_data() -> dict:
-    """Everything templates/book.html needs: every story, oldest first, laid
-    out like a keepsake. Concerns stay out; they're for the family to check,
-    not for the book. Never raises."""
-    rows, state = _rows("stories", time.monotonic() + PAGE_WAIT_SECONDS)
+    """Everything templates/book.html needs, laid out like a keepsake: every
+    story, oldest first, then every photo the family sent with what Claude saw
+    in it. A story told about a photo says so, and the photo names its story.
+    Concerns stay out; they're for the family to check, not for the book.
+    Never raises, and never waits more than about PAGE_WAIT_SECONDS."""
+    deadline = time.monotonic() + PAGE_WAIT_SECONDS
+    warm()  # start every read at once, so they run side by side
+    rows, state = _rows("stories", deadline)
+    photo_rows, photos_state = _rows("photos", deadline)
+    call_rows, _ = _rows("calls", deadline)
     stories = calls.memory_stories(rows)
+    story_by_photo, photo_by_call = photo_links(photo_rows, stories, call_rows)
+
     months = []
-    for s in stories:
-        local = _local(s.get("timestamp", ""))
+    for row in stories + photo_rows:
+        local = _local(row.get("timestamp", ""))
         if local:
             months.append((local.year, local.month, f"{local.strftime('%B')} {local.year}"))
     months.sort()
@@ -219,9 +272,12 @@ def book_data() -> dict:
         collected = months[0][2]
     else:
         collected = f"{months[0][2]} to {months[-1][2]}"
-    entries = []
+
+    entries, number_of = [], {}
     for number, s in enumerate(stories, start=1):
+        number_of[id(s)] = number
         told_on = book_date(s.get("timestamp", ""))
+        photo = photo_by_call.get(str(s.get("call_id", "")))
         entries.append({
             "number": number,
             "title": s.get("title", "").strip() or "Untitled story",
@@ -230,9 +286,30 @@ def book_data() -> dict:
             "places": s.get("places", "").strip(),
             "told": (f"Told on a call on {told_on}" if s.get("source") == "call" and told_on
                      else "One of the stories he told before Storyline"),
+            "photo": photo.get("description", "").strip() if photo else "",
         })
-    return {"name": config.GRANDPA_NAME, "stories": entries, "ok": state == OK, "loading": state == LOADING,
-            "count": _count(len(entries), "story", "stories"), "collected": collected}
+
+    pictures = []
+    for number, p in enumerate(photo_rows, start=1):
+        story = story_by_photo.get(photo_id(p))
+        sent_on = book_date(p.get("timestamp", ""))
+        how = "Texted in" if p.get("source") == "text" else "Uploaded"
+        pictures.append({
+            "number": number,
+            "description": p.get("description", "").strip(),
+            "question": p.get("question", "").strip(),
+            "sent": f"{how} on {sent_on}" if sent_on else how,
+            "story": ({"title": story.get("title", "").strip() or "Untitled story",
+                       "number": number_of.get(id(story))} if story and id(story) in number_of else None),
+            "asked": p.get("asked", "").upper() == "TRUE",
+        })
+
+    count = _count(len(entries), "story", "stories")
+    if pictures:
+        count += f" and {_count(len(pictures), 'photo')}"
+    return {"name": config.GRANDPA_NAME, "stories": entries, "photos": pictures,
+            "ok": state == OK, "loading": state == LOADING, "photos_loading": photos_state == LOADING,
+            "count": count, "collected": collected}
 
 
 def page_data() -> dict:
@@ -253,6 +330,7 @@ def page_data() -> dict:
     last_call = call_rows[-1] if call_rows else None
     last_photo = photo_rows[-1] if photo_rows else None
     texted = [p for p in photo_rows if p.get("source") == "text"]
+    story_by_photo, photo_by_call = photo_links(photo_rows, stories, call_rows)
     text_number = pretty_phone(texting.phone_number())
     # Sendblue's free plan only passes on texts from the family's verified
     # phones, so judges are pointed at the upload form instead of the number.
@@ -334,24 +412,38 @@ def page_data() -> dict:
          "link": sheet_url},
     ]
 
-    photos = [{
-        "description": p.get("description", "").strip(),
-        "question": p.get("question", "").strip(),
-        "asked": p.get("asked", "").upper() == "TRUE",
-        "how": "Texted in" if p.get("source") == "text" else "Uploaded",
-        "when": friendly_time(p.get("timestamp", "")),
-    } for p in reversed(photo_rows[-PHOTOS_SHOWN:])]
+    def anchor(story: dict) -> str:
+        return f"story-{story.get('_row', '')}"
 
-    story_book = [{
-        "anchor": f"story-{s.get('_row', '')}",
-        "title": s.get("title", "").strip() or "Untitled story",
-        "summary": s.get("summary", "").strip(),
-        "people": s.get("people", "").strip(),
-        "places": s.get("places", "").strip(),
-        "concern": s.get("concern", "").strip(),
-        "told": (f"Told on a call {friendly_time(s.get('timestamp', ''))}"
-                 if s.get("source") == "call" else "One of the stories he told before Storyline"),
-    } for s in reversed(stories)]
+    photos = []
+    for p in reversed(photo_rows[-PHOTOS_SHOWN:]):
+        story = story_by_photo.get(photo_id(p))
+        photos.append({
+            "key": photo_id(p),
+            "description": p.get("description", "").strip(),
+            "question": p.get("question", "").strip(),
+            "asked": p.get("asked", "").upper() == "TRUE",
+            "how": "Texted in" if p.get("source") == "text" else "Uploaded",
+            "when": friendly_time(p.get("timestamp", "")),
+            "story": ({"title": story.get("title", "").strip() or "Untitled story", "anchor": anchor(story)}
+                      if story else None),
+        })
+
+    story_book = []
+    for s in reversed(stories):
+        told = (f"Told on a call {friendly_time(s.get('timestamp', ''))}"
+                if s.get("source") == "call" else "One of the stories he told before Storyline")
+        if str(s.get("call_id", "")) in photo_by_call:
+            told += ", about a photo the family sent"
+        story_book.append({
+            "anchor": anchor(s),
+            "title": s.get("title", "").strip() or "Untitled story",
+            "summary": s.get("summary", "").strip(),
+            "people": s.get("people", "").strip(),
+            "places": s.get("places", "").strip(),
+            "concern": s.get("concern", "").strip(),
+            "told": told,
+        })
 
     return {
         "name": name,
@@ -366,8 +458,13 @@ def page_data() -> dict:
         "photo_count": len(photo_rows),
         "stories": story_book,
         "texting_on": bool(text_number),
+        # Shown to everyone when anyone can text it (Linq); otherwise only to a
+        # visitor who has typed the demo code (templates/index.html checks).
         "text_number": text_number if text_open else "",
         "text_sms": "sms:" + texting.phone_number() if text_open else "",
+        "family_number": text_number,
+        "family_sms": "sms:" + texting.phone_number() if text_number else "",
+        "live_version": live_version(),
         "sheet_url": sheet_url,
         "github_url": config.get("GITHUB_URL", GITHUB_URL),
     }

@@ -122,12 +122,15 @@ def choose_plan(stories: list[dict], photos: list[dict], call_count: int) -> dic
     return {"kind": "topic", "topic": topics[0]}
 
 
+PHOTO_TOPIC = "Asked about a photo: "  # page.photo_links finds the photo by what follows
+
+
 def plan_summary(plan: dict) -> str:
     """One line saying what a call is about, for the calls tab and the page."""
     if plan["kind"] == "photo":
         description = plan["photo"].get("description", "").strip()
         short = description if len(description) <= 90 else description[:87].rstrip() + "..."
-        return f"Asked about a photo: {short}"
+        return f"{PHOTO_TOPIC}{short}"
     if plan["kind"] == "story":
         return f"Retold \"{plan['story'].get('title', '').strip()}\""
     return f"New topic: {plan['topic']}"
