@@ -545,6 +545,9 @@ a:hover { text-decoration-color: currentColor; }
   font-weight: 700;
   line-height: 0.82;
 }
+/* When the story opens with a one-letter word ("I remember..."), the space
+   after it disappears beside the big letter, so add the gap back. */
+.book-story .summary.word-letter::first-letter { margin-right: 0.3em; }
 .book-story .facts {
   display: grid;
   grid-template-columns: max-content 1fr;

@@ -282,6 +282,9 @@ def book_data() -> dict:
             "number": number,
             "title": s.get("title", "").strip() or "Untitled story",
             "summary": s.get("summary", "").strip(),
+            # "I remember..." opens with a one-letter word; the book's big
+            # first letter needs a gap after it (static/style.css).
+            "word_letter": bool(re.match(r"""^\W*\w\s""", s.get("summary", "").strip())),
             "people": s.get("people", "").strip(),
             "places": s.get("places", "").strip(),
             "told": (f"Told on a call on {told_on}" if s.get("source") == "call" and told_on

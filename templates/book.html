@@ -53,7 +53,7 @@
                 <p class="saw">{{ story.photo|curly }}</p>
               </div>
             {% endif %}
-            <p class="summary">{{ story.summary|curly }}</p>
+            <p class="summary{% if story.word_letter %} word-letter{% endif %}">{{ story.summary|curly }}</p>
             {% if story.people or story.places %}
               <dl class="facts">
                 {% if story.people %}<dt>People</dt><dd>{{ story.people|curly }}</dd>{% endif %}
