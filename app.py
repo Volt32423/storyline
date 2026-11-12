@@ -13,7 +13,7 @@ from pathlib import Path
 import requests
 from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 
-from services import calls, claude_ai, config, knowledge, linq, page, photos, sendblue, sheets
+from services import calls, config, knowledge, linq, page, photos, sendblue, sheets
 
 try:
     import fcntl  # Linux/macOS only; Render runs Linux
@@ -278,7 +278,7 @@ def test_story():
         if not story:
             return jsonify({"ok": False, "error": "Nothing was saved. Check Render's logs for the reason."}), 500
         return jsonify({"ok": True, "saved_to_sheet": True, "story": story})
-    story = claude_ai.summarize_call(calls.call_transcript(message))
+    story = calls.summarize(calls.call_transcript(message))
     if not story:
         return jsonify({"ok": False, "error": "Claude didn't answer. Check ANTHROPIC_API_KEY and Render's logs."}), 500
     return jsonify({"ok": True, "saved_to_sheet": False, "story": story})

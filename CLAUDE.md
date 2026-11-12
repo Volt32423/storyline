@@ -62,7 +62,7 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Sendblue
 
 ### Google Sheet tabs (the app creates them on startup)
 
-- `stories`: timestamp, title, summary, people, places, concern, source (seed or call), call_id
+- `stories`: timestamp, title, summary, people, places, concern, source (seed or call), call_id. **Rows with the same title are versions of one story**: when a call adds to a story he told before, it appends the fuller version under that title, so every call keeps its own row. `calls.memory_stories()` shows each story once, as its newest version (with `first`, `order`, `versions`, `call_ids`), for calls, the page and the book; test stories are left out. To merge two stories by hand, give the later row the earlier one's title.
 - `photos`: timestamp, source (text or upload), description, question, asked (TRUE/FALSE)
 - `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason, call_id (Vapi's call id, so the webhook can find the row), topic (what the call was about, e.g. `Asked about a photo: Two young men...` or `Retold "Rowboats at Pine Lake"`). `ensure_tabs` adds a new column's header on the next startup without redeploying the Apps Script.
 
@@ -114,12 +114,13 @@ Built (Nov 2026): the webhook only accepts requests carrying `X-Storyline-Secret
 1. Return 200 right away and do the work in a background thread.
 2. Ignore every message type except `end-of-call-report`. The body is `{"message": {"type": ..., "call": ..., "artifact": ...}}`. Find the transcript in `message.artifact`, and check the docs for the exact field.
 3. Skip calls shorter than about 20 seconds, since there's no story to save.
-4. Send the transcript to Claude (`claude-haiku-5-5`) and ask for JSON:
+4. Send the transcript to Claude (`claude-haiku-5-5`), along with the stories he told before and the call's topic (`calls.summarize`), and ask for JSON:
+   - adds_to: the exact title of an earlier story if this call mostly added to it, else empty. Only a title from the list counts; a "new" story reusing an earlier title is treated as an addition too. The summary is then the whole story (earlier version plus the new details, up to 7 sentences), and the family text says "Grandpa Frank added to a story".
    - title
    - summary: 3–5 sentences, in Frank's voice
    - people
    - places
-   - concern: anything the family may want to check on, such as pain, a fall, feeling unwell or seeming upset. Empty if none. Don't make guesses about his memory or health.
+   - concern: anything the family may want to check on, such as pain, a fall, feeling unwell or seeming upset. Empty if none. Don't make guesses about his memory or health. `claude_ai.clean_concern()` is a safety net: it drops sentences about memory or speech (unless they also name pain, a fall, feeling unwell or being upset) and "no pain was mentioned" sentences.
 5. Append to `stories` and update the `calls` row.
 6. If `SMS_SENDING_ENABLED` is true, send a text through the texting service (Sendblue, or Linq) to `FAMILY_PHONE_NUMBER`: "New story from Grandpa Frank: {title}: {summary}", plus a concern line if there is one.
 7. Save one real payload, with phone numbers scrubbed, to `tests/fixtures/` for `scripts/replay_vapi.py`.

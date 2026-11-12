@@ -43,10 +43,21 @@ STORY_TOOL = {
                 "type": "boolean",
                 "description": f"False if {config.GRANDPA_NAME} shared no real memory (voicemail, wrong number, hung up early, or only small talk).",
             },
-            "title": {"type": "string", "description": "A warm, specific title of 2 to 6 words."},
+            "adds_to": {
+                "type": "string",
+                "description": ("If most of what he shared this call is more of one of the stories he told before, "
+                                "that story's exact title, copied from the list. Empty if it's a different memory."),
+            },
+            "title": {
+                "type": "string",
+                "description": ("A warm, specific title of 2 to 6 words. If adds_to is set, the same exact title. "
+                                "Otherwise a new title, different from every earlier one."),
+            },
             "summary": {
                 "type": "string",
-                "description": f"3 to 5 sentences in {config.GRANDPA_NAME}'s own voice (first person, 'I'), keeping the details he gave.",
+                "description": (f"In {config.GRANDPA_NAME}'s own voice (first person, 'I'), keeping the details he gave: "
+                                "3 to 5 sentences for a new story. If adds_to is set, the whole story: everything in "
+                                "the earlier version plus what he added this call, up to 7 sentences."),
             },
             "people": {
                 "type": "string",
@@ -65,7 +76,7 @@ STORY_TOOL = {
                                 "Empty if he said nothing like that."),
             },
         },
-        "required": ["has_story", "title", "summary", "people", "places", "concern"],
+        "required": ["has_story", "adds_to", "title", "summary", "people", "places", "concern"],
     },
 }
 
@@ -74,6 +85,8 @@ SUMMARY_SYSTEM = f"""You write entries for a family story book. You'll get the t
 Save the memory {config.GRANDPA_NAME} shared, using the save_story tool:
 - Use only what {config.GRANDPA_NAME} said. Never add details he didn't say, and don't present Storyline's own retelling as new information unless he confirmed or added to it.
 - Write the summary in his own voice ("I..."), warm and plain, 3 to 5 sentences.
+- He often adds to a story he told before; you'll get those stories, and what the call set out to bring back. If most of what he shared is more of one of them (the same event, place or people, like more about the same summers at Pine Lake), set adds_to to that story's exact title, keep that title, and write the whole story: everything in the earlier version plus his new details, up to 7 sentences. Where his new version differs, go with the new one. People and places cover the whole story too.
+- If it's a different memory, leave adds_to empty and give it a new title that isn't one of the earlier ones.
 - concern is texted to his family for them to follow up on. Fill it only when he himself said he has pain, was hurt or fell, feels sick or unwell, or is clearly upset (lonely, scared, sad). Write one sentence close to his words, such as: "He said his knees have been bothering him on the stairs." His memory fading is expected and is never a concern: don't mention forgetting, trouble recalling, mixing up details, repeating himself or pauses. Don't guess about his health, and never write what he didn't mention (such as "No pain or falls were mentioned"). Otherwise leave it empty.
 - If he shared no real memory, set has_story to false.
 
@@ -116,8 +129,19 @@ def clean_concern(concern: str) -> str:
     return cleaned
 
 
-def summarize_call(transcript: str) -> dict | None:
-    """Return {has_story, title, summary, people, places, concern}, or None on failure."""
+def summarize_call(transcript: str, earlier: list[dict] | None = None, planned: str = "") -> dict | None:
+    """Return {has_story, adds_to, title, summary, people, places, concern},
+    or None on failure. earlier: the stories he told before (title, summary,
+    people, places), so a call that adds to one can say so. planned: what the
+    call set out to bring back, from the calls tab's topic."""
+    told = "\n".join(
+        f"- {s.get('title', '').strip()}: {s.get('summary', '').strip()}"
+        f" (People: {s.get('people', '').strip() or 'none'}. Places: {s.get('places', '').strip() or 'none'}.)"
+        for s in earlier or [] if s.get("title")
+    ) or "- (none yet)"
+    request = (f"<stories_he_told_before>\n{told}\n</stories_he_told_before>\n"
+               f"<this_call_set_out_to>{planned or 'Not recorded'}</this_call_set_out_to>\n"
+               f"<transcript>\n{transcript}\n</transcript>")
     try:
         response = _anthropic().messages.create(
             model=SUMMARY_MODEL,
@@ -126,7 +150,7 @@ def summarize_call(transcript: str) -> dict | None:
             system=SUMMARY_SYSTEM,
             tools=[STORY_TOOL],
             tool_choice={"type": "tool", "name": "save_story"},
-            messages=[{"role": "user", "content": f"<transcript>\n{transcript}\n</transcript>"}],
+            messages=[{"role": "user", "content": request}],
         )
     except Exception as error:
         log.error("Story summary failed: %s", error)

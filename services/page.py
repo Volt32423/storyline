@@ -197,13 +197,22 @@ def photo_id(photo: dict) -> str:
     return f"photo-{photo.get('_row') or photo.get('timestamp', '')}"
 
 
+def _calls_of(story: dict) -> list[str]:
+    """Every call that told this story or added to it (calls.memory_stories)."""
+    return story.get("call_ids") or ([str(story["call_id"])] if story.get("call_id") else [])
+
+
+def _photo_for(story: dict, photo_by_call: dict) -> dict | None:
+    """The photo that brought this story up, if any call about a photo told it or added to it."""
+    return next((photo_by_call[c] for c in _calls_of(story) if c in photo_by_call), None)
+
+
 def photo_links(photo_rows: list, stories: list, call_rows: list) -> tuple[dict, dict]:
     """Which story each photo led to. A call that asked about a photo has a
     topic like "Asked about a photo: <start of Claude's description>", and the
     story saved after that call carries the call's id. Returns
     (story by photo_id, photo by call id). Never raises."""
-    story_by_call = {str(s.get("call_id", "")): s for s in stories
-                     if s.get("source") == "call" and s.get("call_id")}
+    story_by_call = {call_id: s for s in stories for call_id in _calls_of(s)}
     story_by_photo, photo_by_call = {}, {}
     for row in call_rows:
         topic = str(row.get("topic", ""))
@@ -274,10 +283,20 @@ def book_data() -> dict:
         collected = f"{months[0][2]} to {months[-1][2]}"
 
     entries, number_of = [], {}
-    for number, s in enumerate(stories, start=1):
+    # In the order he first told them; a story he added to keeps its place.
+    for number, s in enumerate(sorted(stories, key=lambda s: s.get("order", 0)), start=1):
         number_of[id(s)] = number
-        told_on = book_date(s.get("timestamp", ""))
-        photo = photo_by_call.get(str(s.get("call_id", "")))
+        first = s.get("first") or s
+        first_on = book_date(first.get("timestamp", ""))
+        told = (f"Told on a call on {first_on}" if first.get("source") == "call" and first_on
+                else "One of the stories he told before Storyline")
+        if (s.get("versions") or 1) > 1:
+            added_on = book_date(s.get("timestamp", ""))
+            if first.get("source") == "call" and first_on and first_on == added_on:
+                told = f"Told on a call on {first_on}, and added to later that day"
+            elif added_on:
+                told = ("Told before Storyline" if first.get("source") != "call" else told) + f", added to on {added_on}"
+        photo = _photo_for(s, photo_by_call)
         entries.append({
             "number": number,
             "title": s.get("title", "").strip() or "Untitled story",
@@ -287,8 +306,7 @@ def book_data() -> dict:
             "word_letter": bool(re.match(r"""^\W*\w\s""", s.get("summary", "").strip())),
             "people": s.get("people", "").strip(),
             "places": s.get("places", "").strip(),
-            "told": (f"Told on a call on {told_on}" if s.get("source") == "call" and told_on
-                     else "One of the stories he told before Storyline"),
+            "told": told,
             "photo": photo.get("description", "").strip() if photo else "",
         })
 
@@ -433,10 +451,15 @@ def page_data() -> dict:
         })
 
     story_book = []
-    for s in reversed(stories):
-        told = (f"Told on a call {friendly_time(s.get('timestamp', ''))}"
-                if s.get("source") == "call" else "One of the stories he told before Storyline")
-        if str(s.get("call_id", "")) in photo_by_call:
+    for s in reversed(stories):  # most recently told or added to first
+        first = s.get("first") or s
+        told = (f"Told on a call {friendly_time(first.get('timestamp', ''))}"
+                if first.get("source") == "call" else "One of the stories he told before Storyline")
+        if (s.get("versions") or 1) > 1:
+            if first.get("source") != "call":
+                told = "Told before Storyline"
+            told += f", added to {friendly_time(s.get('timestamp', ''))}"
+        if _photo_for(s, photo_by_call):
             told += ", about a photo the family sent"
         story_book.append({
             "anchor": anchor(s),

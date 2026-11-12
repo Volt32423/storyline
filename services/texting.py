@@ -48,13 +48,17 @@ def send_to_number(number: str, text: str) -> bool:
 
 
 def send_family_story(story: dict) -> None:
-    """After a call: text the new story to FAMILY_PHONE_NUMBER."""
+    """After a call: text the new story (or the fuller version of one he
+    added to) to FAMILY_PHONE_NUMBER."""
     number = config.get("FAMILY_PHONE_NUMBER")
     if not (number and sending_enabled()):
         return
     name = config.GRANDPA_NAME
     prefix = "(Test) " if story.get("source") == "test" else ""
-    text = f"{prefix}New story from Grandpa {name}: {story['title']}\n\n{story['summary']}"
+    if story.get("adds_to"):
+        text = f"{prefix}Grandpa {name} added to a story: {story['title']}\n\n{story['summary']}"
+    else:
+        text = f"{prefix}New story from Grandpa {name}: {story['title']}\n\n{story['summary']}"
     if story.get("concern"):
         text += f"\n\nWorth checking on: {story['concern']}"
     send_to_number(number, text)

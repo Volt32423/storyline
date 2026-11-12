@@ -103,10 +103,41 @@ def check_limits(phone_e164: str) -> None:
 
 # ---------- what this call is about ----------
 
+def title_key(title) -> str:
+    """Titles compared the way a person would: case, spacing and curly
+    apostrophes don't matter."""
+    return re.sub(r"\s+", " ", str(title or "").replace("\u2019", "'")).strip().casefold()
+
+
 def memory_stories(stories: list[dict]) -> list[dict]:
-    """Stories saved by the /test/story link are for checking the setup, not
-    memories, so calls and the story book leave them out."""
-    return [s for s in stories if s.get("source") != "test"]
+    """Frank's stories as he'd tell them today, for calls, the page and the book.
+
+    Stories saved by the /test/story link are for checking the setup, so
+    they're left out. When a call adds to a story he told before, it saves a
+    fuller version under the same title, in a new row (so every call keeps
+    its own row in the Sheet). Each story appears once, as its newest
+    version, where that version sits in the Sheet, with:
+      first:    the row where he first told it
+      order:    where that first row sits (the book lists stories in this order)
+      versions: how many rows share the title
+      call_ids: every call that told it or added to it"""
+    real = [s for s in stories if s.get("source") != "test"]
+    groups: dict[str, list[dict]] = {}
+    for index, s in enumerate(real):
+        key = title_key(s.get("title")) or f"#untitled-{index}"
+        groups.setdefault(key, []).append(s)
+    shown = []
+    for index, s in enumerate(real):
+        group = groups[title_key(s.get("title")) or f"#untitled-{index}"]
+        if s is not group[-1]:
+            continue
+        story = dict(s)
+        story["first"] = group[0]
+        story["order"] = real.index(group[0])
+        story["versions"] = len(group)
+        story["call_ids"] = [str(g["call_id"]) for g in group if g.get("call_id")]
+        shown.append(story)
+    return shown
 
 
 def choose_plan(stories: list[dict], photos: list[dict], call_count: int) -> dict:
@@ -384,6 +415,32 @@ def _update_call_row(call_id: str, duration: int | None, ended_reason: str) -> N
     log.warning("No calls row for call %s (a replay, or the row wasn't saved)", call_id)
 
 
+def summarize(transcript: str, call_id: str = "") -> dict | None:
+    """Claude's story for a call. Claude sees the stories he told before and
+    what the call set out to bring back, so a call that adds to an earlier
+    story says so (adds_to, with that story's exact title) instead of saving
+    a near-copy. Returns None if Claude didn't answer."""
+    earlier, planned = [], ""
+    try:
+        earlier = memory_stories(sheets.rows("stories", use_cache=True))
+        if call_id:
+            row = next((r for r in sheets.rows("calls", use_cache=True) if r.get("call_id") == call_id), None)
+            planned = str((row or {}).get("topic", "") or "")
+    except Exception as error:
+        log.error("Couldn't load his earlier stories for the summary: %s", error)
+    story = claude_ai.summarize_call(transcript, earlier, planned)
+    if not story:
+        return None
+    titles = {title_key(s.get("title")): str(s.get("title", "")).strip() for s in earlier if s.get("title")}
+    # Only a title from the list counts. A "new" story with an earlier
+    # story's title is that story again, so it's treated as an addition too.
+    adds_to = titles.get(title_key(story.get("adds_to"))) or titles.get(title_key(story.get("title"))) or ""
+    if adds_to:
+        story["title"] = adds_to
+    story["adds_to"] = adds_to
+    return story
+
+
 def handle_end_of_call(message: dict, source: str = "call") -> dict | None:
     """Save the story from a finished call. Runs in a background thread.
     Returns the saved story, or None when there was nothing to save.
@@ -415,7 +472,7 @@ def handle_end_of_call(message: dict, source: str = "call") -> dict | None:
     except Exception as error:
         log.error("Couldn't check for an existing story: %s", error)
 
-    story = claude_ai.summarize_call(transcript)
+    story = summarize(transcript, call_id)
     if not story:
         return None
     if not story.get("has_story"):
@@ -431,13 +488,15 @@ def handle_end_of_call(message: dict, source: str = "call") -> dict | None:
         "concern": story.get("concern", "").strip(),
         "source": source,
         "call_id": call_id,
+        "adds_to": story.get("adds_to", ""),  # not a column; tells the family text it's an addition
     }
     try:
         sheets.append("stories", record)
     except Exception as error:
         log.error("Story '%s' couldn't be saved to the Sheet: %s", record["title"], error)
         return None
-    log.info("Story saved: %s%s", record["title"], " (with a concern for the family)" if record["concern"] else "")
+    log.info("%s: %s%s", "Story added to" if record["adds_to"] else "Story saved", record["title"],
+             " (with a concern for the family)" if record["concern"] else "")
     try:
         texting.send_family_story(record)
     except Exception as error:
