@@ -4,8 +4,8 @@
 
 Storyline is an AI companion that phones Grandpa Frank. Each call gently brings back one memory: it retells a story he shared before and invites him to add to it, asks about an old family photo, or starts a new story. It never quizzes him. Every story is saved to a family Google Sheet so none of them are lost.
 
-- **Live site:** _coming soon_
-- **Demo video:** _coming soon_
+- **Live site:** https://storyline-v52a.onrender.com
+- **Demo video:** linked in the submission form (kept private)
 
 ## Why this matters to me
 

@@ -290,7 +290,7 @@ Do one step at a time. Finish each step by passing its "done when" check, then c
 
 ## The README must include
 
-- The live URL and a link to the demo video
+- The live URL. The demo video stays private: its link goes only in the submission form, and the README says so.
 - How judges try it. The demo code goes in the submission form, not the README.
 - The six superpowers and where to see each one
 - Setup: the accounts needed, the environment variables, deploying on Render, and creating the Sheet and its Apps Script bridge
