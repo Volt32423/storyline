@@ -47,6 +47,16 @@ def send_to_number(number: str, text: str) -> bool:
     return False
 
 
+def send_family_concern(concern: str, source: str = "call") -> None:
+    """After a call with no story: still tell the family what he said about
+    his health or mood, since Storyline told him it would."""
+    number = config.get("FAMILY_PHONE_NUMBER")
+    if not (number and concern and sending_enabled()):
+        return
+    prefix = "(Test) " if source == "test" else ""
+    send_to_number(number, f"{prefix}From Grandpa {config.GRANDPA_NAME}'s call today, worth checking on: {concern}")
+
+
 def send_family_story(story: dict) -> None:
     """After a call: text the new story (or the fuller version of one he
     added to) to FAMILY_PHONE_NUMBER."""

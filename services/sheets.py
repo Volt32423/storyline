@@ -23,7 +23,7 @@ TABS = {
     "stories": ["timestamp", "title", "summary", "people", "places", "concern", "source", "call_id"],
     "photos": ["timestamp", "source", "description", "question", "asked"],
     # topic: what the call was about, e.g. 'Asked about a photo: Two young men...'
-    "calls": ["timestamp", "phone_last4", "status", "duration_seconds", "ended_reason", "call_id", "topic"],
+    "calls": ["timestamp", "phone_last4", "status", "duration_seconds", "ended_reason", "call_id", "topic", "concern"],
 }
 
 TIMEOUT_SECONDS = 30

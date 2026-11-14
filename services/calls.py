@@ -415,6 +415,15 @@ def _update_call_row(call_id: str, duration: int | None, ended_reason: str) -> N
     log.warning("No calls row for call %s (a replay, or the row wasn't saved)", call_id)
 
 
+def _set_call_concern(call_id: str, concern: str) -> None:
+    """Note a concern on the call's own row, so it's kept even when the call
+    had no story to save (he mentioned his knee, but told no memory)."""
+    for row in sheets.rows("calls", use_cache=True):
+        if row.get("call_id") == call_id:
+            sheets.update_cell("calls", row["_row"], "concern", concern)
+            return
+
+
 def summarize(transcript: str, call_id: str = "") -> dict | None:
     """Claude's story for a call. Claude sees the stories he told before and
     what the call set out to bring back, so a call that adds to an earlier
@@ -475,8 +484,23 @@ def handle_end_of_call(message: dict, source: str = "call") -> dict | None:
     story = summarize(transcript, call_id)
     if not story:
         return None
+    concern = str(story.get("concern") or "").strip()
+    if concern and call_id:
+        try:
+            _set_call_concern(call_id, concern)
+        except Exception as error:
+            log.error("Couldn't note the concern on the calls row for %s: %s", call_id, error)
     if not story.get("has_story"):
-        log.info("No story saved for %s: Claude found no memory in the call", call_id)
+        if concern:
+            # Storyline told him it would let his family know, so it does,
+            # story or not.
+            log.info("No story saved for %s, but the family was told about a concern", call_id)
+            try:
+                texting.send_family_concern(concern, source)
+            except Exception as error:
+                log.error("The family text about a concern failed: %s", error)
+        else:
+            log.info("No story saved for %s: Claude found no memory in the call", call_id)
         return None
 
     record = {

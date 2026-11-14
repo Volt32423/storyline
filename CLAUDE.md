@@ -64,7 +64,7 @@ Flask ──► Claude (vision + summaries), Google Sheet, OpenWeather, Sendblue
 
 - `stories`: timestamp, title, summary, people, places, concern, source (seed or call), call_id. **Rows with the same title are versions of one story**: when a call adds to a story he told before, it appends the fuller version under that title, so every call keeps its own row. `calls.memory_stories()` shows each story once, as its newest version (with `first`, `order`, `versions`, `call_ids`), for calls, the page and the book; test stories are left out. To merge two stories by hand, give the later row the earlier one's title.
 - `photos`: timestamp, source (text or upload), description, question, asked (TRUE/FALSE)
-- `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason, call_id (Vapi's call id, so the webhook can find the row), topic (what the call was about, e.g. `Asked about a photo: Two young men...` or `Retold "Rowboats at Pine Lake"`). `ensure_tabs` adds a new column's header on the next startup without redeploying the Apps Script.
+- `calls`: timestamp, phone_last4, status, duration_seconds, ended_reason, call_id (Vapi's call id, so the webhook can find the row), topic (what the call was about, e.g. `Asked about a photo: Two young men...` or `Retold "Rowboats at Pine Lake"`), concern (the call's concern, if any, so it's kept even when the call has no story). `ensure_tabs` adds a new column's header on the next startup without redeploying the Apps Script.
 
 On every startup, `app.start_background()` runs `knowledge.seed_sheet()` in a background thread: it creates any missing tabs and loads the stories under "Stories Frank has already told" in `knowledge/profile.md` into `stories`, with source = seed, skipping titles already there. A file lock stops two gunicorn workers from seeding at once. `scripts/seed_sheet.py` does the same by hand.
 
@@ -121,7 +121,7 @@ Built (Nov 2026): the webhook only accepts requests carrying `X-Storyline-Secret
    - people
    - places
    - concern: anything the family may want to check on, such as pain, a fall, feeling unwell or seeming upset. Empty if none. Don't make guesses about his memory or health. `claude_ai.clean_concern()` is a safety net: it drops sentences about memory or speech (unless they also name pain, a fall, feeling unwell or being upset) and "no pain was mentioned" sentences.
-5. Append to `stories` and update the `calls` row.
+5. Append to `stories` and update the `calls` row. Any concern is also written to the call's own `concern` cell. **A call with a concern but no story** (he mentioned his knee but told no memory) saves no story, but still texts the family ("From Grandpa Frank's call today, worth checking on: …") and shows it in the Voice row on the page, because Storyline tells him it will let his family know.
 6. If `SMS_SENDING_ENABLED` is true, send a text through the texting service (Sendblue, or Linq) to `FAMILY_PHONE_NUMBER`: "New story from Grandpa Frank: {title}: {summary}", plus a concern line if there is one.
 7. Save one real payload, with phone numbers scrubbed, to `tests/fixtures/` for `scripts/replay_vapi.py`.
 

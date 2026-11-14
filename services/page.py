@@ -367,6 +367,8 @@ def page_data() -> dict:
         voice = f"Last call {friendly_time(last_call.get('timestamp', ''))}"
         duration = friendly_duration(last_call.get("duration_seconds", ""))
         voice += f", {duration} long." if duration else "."
+        if str(last_call.get("concern", "")).strip():
+            voice += f" Worth checking on: {str(last_call['concern']).strip()}"
     else:
         voice = "No calls yet. Yours can be the first."
 
