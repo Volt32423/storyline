@@ -8,7 +8,11 @@ Two services can do it, and the code for both stays in the repo:
 - Linq (services/linq.py) is used when LINQ_API_TOKEN is set and Sendblue isn't.
 """
 
+import logging
+
 from services import config, linq, sendblue
+
+log = logging.getLogger(__name__)
 
 
 def provider() -> str:
@@ -47,11 +51,27 @@ def send_to_number(number: str, text: str) -> bool:
     return False
 
 
+def _family_number() -> str:
+    """FAMILY_PHONE_NUMBER if a family text can go out now, else "" with a
+    log line saying which setting is missing (never skip silently)."""
+    number = config.get("FAMILY_PHONE_NUMBER")
+    if not number:
+        log.warning("Family text skipped: FAMILY_PHONE_NUMBER isn't set")
+    elif not config.flag("SMS_SENDING_ENABLED", True):
+        log.warning("Family text skipped: SMS_SENDING_ENABLED is %r (set it to true)", config.get("SMS_SENDING_ENABLED"))
+    elif not provider():
+        log.warning("Family text skipped: no texting service is set up "
+                    "(SENDBLUE_API_KEY, SENDBLUE_API_SECRET and SENDBLUE_PHONE_NUMBER all need values)")
+    else:
+        return number
+    return ""
+
+
 def send_family_concern(concern: str, source: str = "call") -> None:
     """After a call with no story: still tell the family what he said about
     his health or mood, since Storyline told him it would."""
-    number = config.get("FAMILY_PHONE_NUMBER")
-    if not (number and concern and sending_enabled()):
+    number = _family_number() if concern else ""
+    if not number:
         return
     prefix = "(Test) " if source == "test" else ""
     send_to_number(number, f"{prefix}From Grandpa {config.GRANDPA_NAME}'s call today, worth checking on: {concern}")
@@ -60,8 +80,8 @@ def send_family_concern(concern: str, source: str = "call") -> None:
 def send_family_story(story: dict) -> None:
     """After a call: text the new story (or the fuller version of one he
     added to) to FAMILY_PHONE_NUMBER."""
-    number = config.get("FAMILY_PHONE_NUMBER")
-    if not (number and sending_enabled()):
+    number = _family_number()
+    if not number:
         return
     name = config.GRANDPA_NAME
     prefix = "(Test) " if story.get("source") == "test" else ""
