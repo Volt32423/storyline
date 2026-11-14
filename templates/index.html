@@ -100,7 +100,7 @@
             <p class="text-us">Text an old photo to <a href="{{ page.family_sms }}"><strong>{{ page.family_number }}</strong></a>, or upload one here.</p>
             <p class="note">Our free texting plan only passes on texts from phones set up as family contacts. If you don&rsquo;t get a reply within a minute, upload the photo here instead. It goes through the same steps.</p>
           {% elif page.texting_on %}
-            <p class="text-us">Family members text old photos to Storyline. You can also upload one here.</p>
+            <p class="text-us">Family members text old photos to Storyline. In this demo, only the family&rsquo;s phones can text it (a free-plan limit), so upload a photo here to try it. It goes through the same steps.</p>
             <details class="reveal">
               <summary>Show the number to text</summary>
               <form method="post" action="{{ url_for('text_number') }}" class="form reveal-form">
